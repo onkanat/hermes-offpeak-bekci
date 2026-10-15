@@ -1,0 +1,27 @@
+name: offpeak-bekci
+version: "0.1.0"
+description: >-
+  Ollama Cloud off-peak penceresini görünür kılar: başlık çubuğu rozeti pencerenin geri
+  sayımını ve onay bekleyen/onaylı iş kalemlerini gösterir, pencere başlamadan 30 dakika önce
+  bir kez toast uyarır ve onayı `/offpeak-onayla <id,id>` ile kullanıcıdan alır (onaysız iş
+  koşmaz). Gövde tarafında `llm_execution` middleware'i yalnız Ollama Cloud çağrılarında, yalnız
+  peak penceresinde, son 60 sn'deki çağrı sayısı hedef hızı aştıysa kısa bir bekleme uygular
+  (tavanlı) ve saatlik kota tavanı aşıldığında uyarı kaydı yazar; istek iptal edilmez.
+  Varsayılan `kuru_kosu: true` — eklenti ölçer, geciktirmez. Ağ çağrısı yok, telemetri yok,
+  sır okumaz; yalnız yerel kuyruk dosyası (`~/MacAir/off-peak-kuyruk.md`) okunur.
+author: "Hakan Kılıçaslan (onkanat)"
+license: MIT
+homepage: https://github.com/onkanat/hermes-offpeak-bekci
+tags:
+  - cost
+  - rate-limit
+  - ollama
+  - desktop
+  - tr
+requires_env: []
+python_dependencies: []
+provides_tools: []
+provides_hooks:
+  - on_session_end
+provides_middleware:
+  - llm_execution
