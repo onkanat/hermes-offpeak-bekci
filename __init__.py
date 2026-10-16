@@ -45,10 +45,12 @@ _ayar_onbellek: Dict[str, Any] = {"ts": 0.0, "ayar": dict(core.VARSAYILAN_AYARLA
 def _ham_ayarlar(ctx: Any = None) -> Dict[str, Any]:
     """Ayarları toplar: ``config.yaml`` → ``offpeak-bekci:`` bloğu, sonra plugin ayar katmanı.
 
-    ``plugins.entries.offpeak-bekci.settings.*`` (``ctx.get_config``) bloğu **ezer**; böylece
-    aynı eklenti profil başına farklı eşiklerle çalışabilir. Varsayılanlar ``plugin.yaml`` →
-    ``config_schema``'dan gelir (``core.VARSAYILAN_AYARLAR``); burada kullanıcıya özel hiçbir
-    değer sabitlenmez. Eski ad ``t30_dk`` (varsa) kanonik ``on_bildirim_dk``'ya çevrilir.
+    Etkin sıra ``core.AYAR_KATMAN_SIRASI``dır: ``ctx.config`` (``plugins.entries.offpeak-bekci``
+    → ``settings.*``) bloğu **ezer** — sunucunun uyguladığı eşik masaüstünün gösterdiği ayardan
+    ayrışmasın ve aynı eklenti profil başına farklı eşiklerle çalışabilsin. Blok kurulumun onaylı
+    eşikleridir ve şema varsayılanını ezer. Varsayılanlar ``plugin.yaml`` → ``config_schema``'dan
+    gelir (``core.VARSAYILAN_AYARLAR``); burada kullanıcıya özel hiçbir değer sabitlenmez. Eski ad
+    ``t30_dk`` (varsa) kanonik ``on_bildirim_dk``'ya çevrilir.
     """
     ham: Dict[str, Any] = {}
     try:

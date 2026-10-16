@@ -35,15 +35,15 @@ provides_middleware:
 
 # ── Ayarlar (tek beyan kaynağı) ─────────────────────────────────────────────────────────
 #
-# ETKİN DEĞER SIRASI (yüksekten düşüğe):
-#   1. `config.yaml` → `offpeak-bekci:` bloğu  (kuruluma özel, kullanıcı onaylı eşikler)
-#   2. masaüstünde `ctx.config` (plugins.entries.<id>.settings.*) — sunucu bloğunu ezer
+# ETKİN DEĞER SIRASI (yüksekten düşüğe) — uygulama: `bekci_core.AYAR_KATMAN_SIRASI`:
+#   1. `plugins.entries.<id>.settings.*` (`ctx.config`) — kullanıcı/masaüstü ayarı; sunucu bloğunu ezer
+#   2. `config.yaml` → `offpeak-bekci:` bloğu  (kuruluma özel, kullanıcı onaylı eşikler)
 #   3. bu dosyadaki `default` (kurulum bloğu hiç yoksa kullanılan genel değer)
 #
 # `default` değerleri GENELdir: bu makinede onaylanmış eşikler (16.10.2026, Kanban t_358cb364)
-# `config.yaml` bloğunda durur ve kazanır — eklenti onların kopyasını tutmaz. Aşağıdaki
-# "yerinde değer config.yaml'dadır" notlu anahtarlar bu yüzden bilinçli olarak genel
-# varsayılana sahiptir (ör. hedef_hiz_dk 6 ≠ onaylı 15).
+# `config.yaml` bloğunda durur ve varsayılanı ezer (masaüstü ayarı yazılmışsa o daha üstte kalır)
+# — eklenti onların kopyasını tutmaz. Aşağıdaki "yerinde değer config.yaml'dadır" notlu anahtarlar
+# bu yüzden bilinçli olarak genel varsayılana sahiptir (ör. hedef_hiz_dk 6 ≠ onaylı 15).
 #
 # `bekci_core.VARSAYILAN_AYARLAR` bu dosyadan okunur (tek doğruluk kaynağı); `tests/test_ayarlar.py`
 # iki tarafın ayrışmasını test eder. Bir ayar ekler/değiştirirken İKİ yeri değil, burayı düzeltin.

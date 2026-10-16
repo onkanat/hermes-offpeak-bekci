@@ -40,9 +40,19 @@ PENCERE_PEAK = "peak"
 PENCERE_OFFPEAK = "off-peak"
 
 #: Ayarların TEK BEYAN KAYNAĞI ``plugin.yaml`` → ``config_schema``'dır; varsayılanlar aşağıda
-#: import anında oradan okunur. Etkin değer sırası (yüksekten düşüğe): ``config.yaml`` →
-#: ``offpeak-bekci:`` bloğu > masaüstü ``ctx.config`` > bu varsayılanlar.
+#: import anında oradan okunur. Etkin değer sırası ``AYAR_KATMAN_SIRASI``dır (yüksekten düşüğe);
+#: ``__init__._ham_ayarlar`` bunu uygular, ``tests/test_ayar_zinciri.py`` ölçer.
 #: Kullanıcıya özel hiçbir yol/değer bu modülde sabitlenmez (``kuyruk_dosyasi`` dahil).
+AYAR_KATMAN_SIRASI: Tuple[str, ...] = (
+    # Kullanıcı/masaüstü ayarı (plugins.entries.<id>.settings.*): masaüstünün gösterdiği ayar ile
+    # sunucunun uyguladığı eşik ayrışmasın diye EN ÜSTTE. `ctx.get_config` yalnız gerçekten
+    # yazılmış değeri döndürür; yazılmamışsa blok geçerli kalır.
+    "ctx.config",
+    # Kurulumun kullanıcı onaylı eşik bloğu (config.yaml → offpeak-bekci:); şema varsayılanını ezer.
+    "config.yaml:offpeak-bekci",
+    # plugin.yaml → config_schema `default` (hiçbir katman yoksa).
+    "sema_varsayilani",
+)
 _AYAR_SIRASI: Tuple[str, ...] = (
     "kuru_kosu",
     "kuyruk_dosyasi",
