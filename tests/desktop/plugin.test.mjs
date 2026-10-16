@@ -233,7 +233,7 @@ test('davranış: backend beyanı geçici defteri ve sayıları (3/1) rozete ge�
   await ctx.zaman.timeout[0].fn()
 
   assert.deepEqual(bridge.cagrilar, [
-    { yol: 'slash.exec', arg: { session_id: 'oturum-w4a2', command: 'offpeak-durum' } }
+    { yol: 'slash.exec', arg: { session_id: 'oturum-w4a2', command: 'offpeak-durum json' } }
   ])
 
   const yazi = metin(rozetAgaci(katki).props.children)

@@ -195,7 +195,8 @@ async function sayilariTazele() {
   }
 
   try {
-    const yanit = await host.request('slash.exec', { session_id: sid, command: 'offpeak-durum' })
+    // `json` argümanı ŞART: komut varsayılan olarak İNSAN OKUR rapor döner (16.10.2026 değişikliği).
+    const yanit = await host.request('slash.exec', { session_id: sid, command: 'offpeak-durum json' })
     const yeni = yanitCoz(yanit)
     const uzakAyar = ayarCoz(yanit)
 

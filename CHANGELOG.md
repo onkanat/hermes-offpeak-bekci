@@ -3,6 +3,16 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.1] — 2026-10-16
+
+- `/offpeak-durum` artık **okunur rapor** döner (varsayılan); makine çıktısı `json` argümanına taşındı
+  (`/offpeak-durum json`). Sebep: kullanıcı komutu kendisi yazdığında ham JSON **okunamıyordu**
+  (ölçüm: masaüstü sohbeti, 16.10.2026). Rozet `json` argümanını geçer; JSON **sözleşmesi (anahtarlar)
+  değişmedi**, yalnız varsayılan çıktı biçimi değişti.
+- Yeni kapı: `tests/test_komut_cikti.py` — rapor insan okur ve kısa (≤14 satır), `json` argümanı
+  sözleşmeyi koruyor, okunamayan kuyruk defteri raporda görünür.
+- README: masaüstü yarısının kurulum satırı ve `json` argümanı belgelendi.
+
 ## [0.1.0] — 2026-10-16
 
 İlk sürüm. Bugüne kadarki dilimler (W1…W5), her biri tek satır:

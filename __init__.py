@@ -210,11 +210,67 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
     return veri
 
 
+def _durum_metni(d: Dict[str, Any]) -> str:
+    """İnsan okur özet (markdown) — `/offpeak-durum` varsayılan çıktısı.
+
+    Neden ayrı bir yol: eski davranış tek satır JSON'du ve rozet onu makine olarak okur; ama
+    kullanıcı komutu kendisi yazdığında ham JSON **okunamıyor** (ölçüm: 16.10.2026, kullanıcı
+    bildirdi: "chat alanında rapor çıktı ama ham json hiçbir şey okuyamadım"). Artık:
+    varsayılan = bu rapor, makine çıktısı = `/offpeak-durum json` (rozet bu argümanı geçer).
+    """
+    k = d.get("kuyruk") or {}
+    kota = d.get("kota") or {}
+
+    def _kisa(x: Any, n: int = 70) -> str:
+        s = " ".join(str(x or "").split())
+        return s[:n] + ("…" if len(s) > n else "")
+
+    satirlar = [
+        f"**Off-peak bekçisi** — {d.get('ozet', '')}",
+        "",
+        f"- **pencere**: şu an **{str(d.get('pencere', '')).upper()}**"
+        + (" — off-peak AKTİF" if not d.get("peak_mi") else "")
+        + f" · sonraki {d.get('gelecek_pencere')} **{d.get('geri_sayim')}** sonra",
+        f"- **kuyruk**: {k.get('toplam', 0)} kalem · {k.get('onaylı', 0)} onaylı · "
+        f"{k.get('koşuldu', 0)} koşuldu · {k.get('atlandı', 0)} atlandı"
+        + (f" · {k.get('sahipsiz')} sahipsiz" if k.get("sahipsiz") else ""),
+        f"- **kuru koşu**: {'AÇIK (yalnız ölçer, geciktirmez)' if d.get('kuru_kosu') else 'KAPALI (gerçekten erteleyebilir)'}"
+        f" · hedef hız: {d.get('hedef_hiz_dk')} çağrı/dk · erteleme tavanı: {d.get('erteleme_tavani_sn')} sn",
+        f"- **son 60 sn**: {d.get('son_60sn')} LLM çağrısı · kota: {kota.get('sayi')}/{kota.get('tavan')}"
+        f" çağrı ({'UYARI VAR' if kota.get('uyari') else 'uyarı yok'})",
+    ]
+
+    kalemler = d.get("kalemler") or []
+    bekleyen = [x for x in kalemler if str(x.get("durum") or "") not in ("", "koşuldu", "atlandı")]
+    if bekleyen:
+        satirlar.append("- **onay/iş bekleyenler**: " + " · ".join(
+            f"`{x.get('id')}` {_kisa(x.get('metin'), 40)}" for x in bekleyen[:5]))
+        if len(bekleyen) > 5:
+            satirlar.append(f"  … ve {len(bekleyen) - 5} tane daha")
+    elif kalemler:
+        satirlar.append("- **onay bekleyen**: yok (tüm kalemler koşuldu/atlandı)")
+
+    yol = d.get("kuyruk_dosyasi")
+    if d.get("kuyruk_dosyasi_var"):
+        satirlar.append(f"- **kuyruk defteri**: `{yol}` ✓")
+    else:
+        satirlar.append(f"- **kuyruk defteri**: `{yol}` ✗ OKUNAMADI — {_kisa(d.get('kuyruk_hata'), 90)}")
+
+    satirlar.append("")
+    satirlar.append("_makine çıktısı (rozet/otomasyon): `/offpeak-durum json`_")
+    return "\n".join(satirlar)
+
+
 def _komut_durum(ctx: Any = None) -> Callable[..., str]:
-    """``/offpeak-durum`` — rozetin okuduğu tek satır JSON."""
+    """``/offpeak-durum [json]`` — insan okur rapor (varsayılan) veya tek satır JSON (rozet)."""
 
     def offpeak_durum(raw_args: str = "") -> str:
-        return json.dumps(_durum_verisi(ctx), ensure_ascii=False)
+        d = _durum_verisi(ctx)
+
+        if str(raw_args or "").strip().lower().startswith("json"):
+            return json.dumps(d, ensure_ascii=False)
+
+        return _durum_metni(d)
 
     return offpeak_durum
 
@@ -475,7 +531,8 @@ def register(ctx: Any) -> None:
     ctx.register_command(
         "offpeak-durum",
         handler=_komut_durum(ctx),
-        description="Ollama off-peak penceresi, geri sayım, kota ve kuyruk durumu (JSON).",
+        description="Ollama off-peak penceresi, geri sayım, kota ve kuyruk durumu (okunur rapor; `json` ile makine çıktısı).",
+        args_hint="[json]",
     )
     ctx.register_command(
         "offpeak-onayla",

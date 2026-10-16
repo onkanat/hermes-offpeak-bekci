@@ -1,0 +1,15 @@
+fix(komut): /offpeak-durum varsayılan olarak OKUNUR rapor döner; JSON `json` argümanına taşındı (0.1.1)
+
+Belirti (kullanıcı, 16.10.2026): komutu sohbete yazdı — "chat alanında rapor çıktı ama ham json hiçbir
+şey okuyamadım". Tek satır JSON rozet içindi ama insan da aynı komutu yazıyor.
+
+- `/offpeak-durum`        → insan okur rapor (özet, pencere, kuyruk sayaçları, kuru koşu, kota, defter durumu)
+- `/offpeak-durum json`   → tek satır JSON (rozet yolu; anahtarlar/sözleşme DEĞİŞMEDİ)
+- Masaüstü yarısı artık `offpeak-durum json` çağırıyor (kabuk.js → plugin.js yeniden derlendi)
+- plugin.yaml 0.1.1 + komut açıklaması; CHANGELOG; README (masaüstü yarısı kurulum satırı + json argümanı)
+- Yeni kapı: tests/test_komut_cikti.py (4 test) — rapor kısa ve okunur, json sözleşmesi korunuyor,
+  okunamayan kuyruk defteri görünür.
+
+Kanıt: 104 test (1 ÖNCEDEN VAR OLAN başarısızlık: test_middleware.test_kuru_kosu_kapaliyken_uyku_istenir —
+9480afb'de de kırık, bu değişiklikle ilgisiz) · masaüstü kapıları 7/7 · build-desktop --check OK ·
+tools/kur.sh KURULUM TAMAM · hermes plugins validate → Validation passed.

@@ -1,5 +1,5 @@
 name: offpeak-bekci
-version: "0.1.0"
+version: "0.1.1"
 # manifest_version 2 = config_schema (ayar beyanı) alanını taşıyan sürüm.
 manifest_version: 2
 description: >-
@@ -35,7 +35,8 @@ provides_middleware:
   - llm_execution
 
 # ── Komutlar ────────────────────────────────────────────────────────────────────────────
-# `/offpeak-durum`   → pencere/geri sayım/kota/kuyruk durumu (JSON; masaüstü rozeti okur)
+# `/offpeak-durum`   → pencere/geri sayım/kota/kuyruk durumu — **okunur rapor** (varsayılan);
+#                      `json` argümanı tek satır JSON döner ve masaüstü rozeti onu okur
 # `/offpeak-onayla`  → kuyruk kalemlerini onaylı yapar (onaysız iş koşmaz)
 # `/offpeak-kur`     → opt-in off-peak cron işinin PLANINI basar: iş adı, zamanlama, prompt,
 #                      monitör, workdir, enabled_toolsets, teslim + plan_hash. Hiçbir şey

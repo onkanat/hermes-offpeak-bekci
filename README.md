@@ -19,6 +19,17 @@ git clone https://github.com/onkanat/hermes-offpeak-bekci && hermes-offpeak-bekc
 
 `tools/kur.sh` repoyu `$HERMES_HOME/plugins/offpeak-bekci` altına kopyalar (idempotent, uzak
 indirme yok), yükleme yüzeyinin sha256'sını basar ve `hermes plugins validate` ile doğrular.
+
+Masaüstü yarısı (rozet) ayrı kurulur — tek dosya:
+
+```bash
+mkdir -p ~/.hermes/desktop-plugins/offpeak-bekci
+cp desktop/plugin.js ~/.hermes/desktop-plugins/offpeak-bekci/plugin.js
+# sonra: Settings ▸ Plugins'ten açın · ⌘K → "Reload desktop plugins"
+```
+
+Rozet, durumu `/offpeak-durum json` ile okur; bu yüzden sunucu ve masaüstü yarısını **birlikte**
+güncelleyin (aynı sürüm).
 Başka bir profil için: `HERMES_HOME=~/.hermes/profiles/<profil> tools/kur.sh`. Bir değeri
 değiştirmek için **kod düzenlemek gerekmez**: ayar `config.yaml` → `offpeak-bekci:` bloğuna yazılır.
 
@@ -30,7 +41,7 @@ yukarıdaki kaynak kurulumu geçerlidir.
 
 | Komut | Ne yapar |
 | --- | --- |
-| `/offpeak-durum` | Pencere, geri sayım, kayan pencere hızı, kota ve kuyruk sayacı — JSON. |
+| `/offpeak-durum` | Pencere, geri sayım, kayan pencere hızı, kota ve kuyruk sayacı. **Varsayılan: okunur rapor**; `/offpeak-durum json` makine çıktısı (masaüstü rozeti bunu okur). |
 | `/offpeak-onayla <id,id>` | Kuyruk defterindeki kalemleri `onaylı` yapar (onaylayan **tek** yer kullanıcıdır). |
 | `/offpeak-kur` | Kurulacak off-peak cron işini **tam** gösterir (iş adı, zamanlama, promptun tamamı, monitör, workdir, araç kümeleri, teslim) + `plan_hash`. **Hiçbir şey kurmaz.** |
 | `/offpeak-kur onayla <plan_hash> [duraklat]` | Yalnız `plan_hash` tutuyorsa devam eder; kurulum **isteğini** oturuma bırakır, işi ajanın kendi `cronjob_manage` aracı kurar (host'a bağlı — bkz. *Hangi host'ta otomatik bırakılır?*). |
