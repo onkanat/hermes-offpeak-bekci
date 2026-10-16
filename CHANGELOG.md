@@ -3,6 +3,26 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.3] — 2026-10-16
+
+**Çalışma zamanı DEĞİŞMEDİ** — bu bir ölçüm/test sürümüdür: `bekci_core.py` (sha256 `5f0c9d0c…`) ve
+`desktop/plugin.js` (sha256 `a39fcacb…`) 0.1.2 ile **birebir aynıdır**; 0.1.2 kurulu olan makinede
+yeniden kurulum gerekmez, yalnız kayıt/pin tazelenir.
+
+- **Kapı kusuru düzeltildi (makineye bağımlı test):** `tests/test_bekci_core.py` içindeki gerçek-defter
+  testi sabit `"K-001"` öneki arıyordu → başka makinede (kendi önek ailesi, ör. `A-*`) **düşüyordu**
+  (kurulu ortamda `107 test · FAILED · EXIT=1`), temiz klonda ise defter olmadığı için tamamen **SKIP**
+  oluyordu (yani davranış hiç sınanmıyordu). Artık: kimlikler **tek bir önek ailesinden** mi +
+  `<önek>-<sayı>` biçiminde mi + `durum` sözlükte mi.
+- **Yeni `SentetikDefterTest`** (makineden bağımsız, 2 test): defter içeriği testin içinde üretilir,
+  `K-*`/`A-*`/`G-*`/`T-*` önekleri sınanır → temiz klonda da koşar.
+- Ortam değişkeni doğru yazımla **`OFFPEAK_KUYRUK_YOLU`** (eski yanlış yazım `KUYRIK` de kabul edilir).
+- Katalog girdisi: pin açıklaması 0.1.2'ye güncellendi; `--no-deps` hakkındaki yanlış yönlendirme
+  kaldırıldı (`requires_env: []` · `python_dependencies: []` → `--no-deps` gereksizdir ve **aktif bir
+  eklentiyi değiştirirken reddedilir**; doğru kurulum `--force --enable`).
+- Kapılar: `python3 -m unittest discover -s tests -t .` → **109 test OK** · hijyen kapısı yeşil ·
+  `node --test tests/desktop/plugin.test.mjs` → 7/7 · `hermes plugins validate .` → EXIT=0.
+
 ## [0.1.2] — 2026-10-16
 
 - **`ozet` yanıltıcıydı, düzeltildi:** "kuyruk 4 bekliyor / 3 onaylı" yazıyordu ama o 4 kalem **koşulmuştu**
