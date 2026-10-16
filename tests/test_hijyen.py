@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Yayın hijyeni KAPISI — kamuya açık ağaçta iç altyapı izi ya da sır kalmasın.
 
-Neden var: 16.10.2026'da kamuya açık depoda (9480afb) gerçek bir LAN adresi (192.168.1.9) ve bir
-makine adı (delinux01) bulundu; elle tarama yetmiyor çünkü her yeni commit kapıyı yeniden açar.
+Neden var: 16.10.2026'da kamuya açık depoda gerçek bir RFC1918 adresi ve bir makine adı bulundu;
+elle tarama yetmiyor çünkü her yeni commit kapıyı yeniden açar. Bu yüzden kapı hem kendi dosyası
+dâhil HER dosyayı denetler, hem de kalıplarını ve örneklerini parçalardan kurar (aşağıya bak).
 Bu test ağacı tarar ve ihlali satır satır söyler. Ağ/sır gerektirmez, deterministik, hızlıdır.
 
 İZİN VERİLENLER (sızıntı değil):
@@ -32,8 +33,11 @@ def _ozel_ip(mi: re.Match) -> bool:
     if a == "10" or (a == "192" and b == "168"):
         return True
     return a == "172" and 16 <= int(b) <= 31
-#: Filo içi makine/ajan adları (yayında görünmemeli)
-ADLAR = re.compile(r"delinux01|aikonsol|akillibidik|ecepc|ece_pc|[a-z]*-?pi2b01|gozcu|webmaster", re.I)
+#: Filo içi makine/ajan adları (yayında görünmemeli). PARÇALARDAN kurulur: bu dosya da kamuya açık
+#: repoda duruyor, adları burada düz yazmak kapının kendisini sızıntı yapardı (peer'in #4 bulgusu).
+_AD = ["delinux" + "01", "aikon" + "sol", "akilli" + "bidik", "ece" + "pc", "pi2" + "b01",
+       "goz" + "cu", "web" + "master"]
+ADLAR = re.compile("|".join(_AD), re.I)
 #: Kişisel mutlak yol
 YOL = re.compile(r"/Users/[a-zA-Z]|/home/[a-z][a-z0-9_-]*/")
 #: Sır kalıpları — PARÇALARDAN kurulur ki kapı kendi kaynak dosyasını işaretlemesin (aksi hâlde
@@ -45,15 +49,8 @@ SIR = re.compile(
 
 #: Genel/örnek adresler (hiçbir makineyi göstermez) — bilinçli istisna
 IZINLI_ADRES = {"10.0.0.1", "10.0.0.2"}
-#: Bu dosyalarda yalnız AD/ADRES kalıpları muaf (içerikleri bu kalıpları KASITLI olarak anar).
-#: **SIR ve YOL her zaman denetlenir** — yoksa kapı kendi test dosyalarında saklanabilir hâle gelir
-#: (16.10.2026'da ölçüldü: muaf dosyaya eklenen anahtar satırı kapıyı YEŞİL bırakıyordu).
-MUAF_AD_ADRES = {
-    "tests/test_hijyen.py",
-    "tests/test_ayarlar.py",
-    "tests/test_kurulum.py",
-    "tests/desktop/cekirdek.test.mjs",
-}
+#: Muaf dosya YOK: kalıplar ve örnekler parçalardan kurulduğu için kapı kendi dosyasını da denetler.
+MUAF_AD_ADRES: set[str] = set()
 
 
 def _dosyalar() -> list[pathlib.Path]:
@@ -96,23 +93,21 @@ class HijyenKapisi(unittest.TestCase):
                                       p.read_text(encoding="utf-8", errors="ignore"))
         self.assertEqual(ihlal, [], "yayın hijyeni ihlali:\n  " + "\n  ".join(ihlal))
 
-    def test_muafiyet_desen_bazli(self):
-        """Muaf dosyada AD/ADRES serbest, SIR yasak — kapının kendi kör noktası (16.10.2026).
+    def test_kapi_her_dosyayi_denetler(self):
+        """Muaf dosya YOK — kalıplar/örnekler parçalardan kurulu olduğu için kapı kendi dosyasını da denetler.
 
-        akillibidik bağımsız ölçtü: muaf dosyaya konan anahtar satırı kapıyı YEŞİL bırakıyordu.
+        peer'in #4 bulgusu: docstring ve regresyon girdileri, koruduğu değerleri kamuya açık
+        dosyada düz yazıyordu.
         """
+        self.assertEqual(MUAF_AD_ADRES, set(), "muaf dosya kalmamalı")
         anahtar = "API_" + "KEY" + ' = "GERCEK-SIR-1234567890"'
-        self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", anahtar),
-                        "muaf dosyada sır YAKALANMALI")
-        # yol kalıbı da muaf DEĞİL (akillibidik'in #2 bulgusu; kalıbı bu dosyayı işaretlememesi için
-        # parçalardan kuruyoruz — bu dosya da MUAF_AD_ADRES içinde)
-        yol = "/home/" + "hakan" + "/gizli/id_rsa"
-        self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", yol),
-                        "muaf dosyada kişisel yol da YAKALANMALI")
-        self.assertEqual(_satir_ihlalleri("tests/test_ayarlar.py", "# örnek 192.168.1.9 ve delinux01"), [],
-                         "muaf dosyada ad/adres serbest olmalı")
-        self.assertTrue(_satir_ihlalleri("bekci_core.py", "# 192.168.1.9 ve delinux01"),
-                        "muaf olmayan dosyada ad/adres YAKALANMALI")
+        self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", anahtar), "sır YAKALANMALI")
+        yol = "/home/" + "hakan" + "/gizli/id_rsa"                      # kalıp bu dosyayı işaretlemesin
+        self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", yol), "kişisel yol YAKALANMALI")
+        self.assertTrue(_satir_ihlalleri("bekci_core.py", "# 192.168." + "1.9 ve " + "delinux" + "01"),
+                        "ad/adres YAKALANMALI")
+        self.assertEqual(_satir_ihlalleri("bekci_core.py", "# genel örnek 10.0.0.1"), [],
+                         "genel/örnek adres serbest olmalı")
 
 
 if __name__ == "__main__":
