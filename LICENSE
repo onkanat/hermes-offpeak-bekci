@@ -3,7 +3,7 @@ MIT License
 Copyright (c) 2026 Hakan Kılıçaslan (onkanat) — offpeak-bekci
 
 Türev / upstream kaynak (atıf korunur):
-  Bu eklentinin masaüstü rozet fikri ve pencere-takvimi kalıbı delinux01'deki
+  Bu eklentinin masaüstü rozet fikri ve pencere-takvimi kalıbı, türev alındığı makinede kurulu olan
   `deepseek-whale` (https://github.com/bmtrnavsky/deepseek-whale, MIT,
   Copyright (c) 2026 Brad Trnavsky) eklentisinden TÜRETİLMİŞTİR; o projenin
   lisans koşulları bu repodaki türev parçalar için de geçerlidir.

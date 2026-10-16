@@ -95,7 +95,7 @@ class MiddlewareTest(unittest.TestCase):
         gunluk = self.gecici / "yerel.jsonl"
         mw = mod._gecikme_kapisi(SahteBaglam(olcum_dosyasi=str(gunluk)))
         for i in range(10):
-            mw({"i": i}, lambda req: "OK", base_url="http://192.168.1.9:11434", model="qwen3:8b")
+            mw({"i": i}, lambda req: "OK", base_url="http://10.0.0.1:11434", model="qwen3:8b")
         self.assertEqual(self.uykular, [])
         self.assertFalse(gunluk.exists(), "yerel çağrı günlüğe bile yazılmamalı")
 

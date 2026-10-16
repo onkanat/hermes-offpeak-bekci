@@ -20,7 +20,7 @@ KOTA GERÇEĞİ (aynı sayfa): faturalama kredi ile (Pro 60 $/ay dahil), eşzama
 Pro 3 / Max-Team 10; sınır aşılırsa istek kuyruğa alınır, kuyruk dolarsa reddedilir; %90'da
 e-posta uyarısı gider; canlı kullanım ollama.com/settings.
 
-UYARI: delinux01'deki ``deepseek-whale`` eklentisinin ``PEAK_WINDOWS = [[1,4],[6,10]]`` değeri
+UYARI: bir peer makinedeki ``deepseek-whale`` eklentisinin ``PEAK_WINDOWS = [[1,4],[6,10]]`` değeri
 DeepSeek API'sinin KENDİ takvimidir (kaynak: api-docs.deepseek.com) — bizim sağlayıcımız Ollama
 olduğu için burada KULLANILMAZ.
 (bkz. tests/test_bekci_core.py::PeakPencereTest.test_deepseek_takvimi_sizmadi)
@@ -267,8 +267,8 @@ def ollama_bulut_mu(
     u = str(base_url or "").strip().lower()
     m = str(model or "").strip().lower()
     # 1) MODEL ADI bulut işareti taşıyorsa buluttur — uç yerel vekil olsa bile.
-    #    Bu filoda bulut modelleri yerel vekil üzerinden çağrılır (127.0.0.1:11434 → ollama.com/v1,
-    #    ECE vekili 192.168.1.26:11435) ve adları ':cloud' ile biter (deepseek-v4.1-flash:cloud);
+    #    Bu filoda bulut modelleri yerel vekil üzerinden çağrılır (127.0.0.1:11434 gibi; LAN'daki
+    #    bir vekil de olabilir) ve adları ':cloud' ile biter (deepseek-v4.1-flash:cloud);
     #    yani base_url tek başına bulutu göstermez. Yerel işaretleri önce kontrol etmek
     #    (eski davranış) bulut çağrılarını TAMAMEN görünmez kılıyordu: ölçüm defterine hiç
     #    kayıt düşmüyordu. Model kontrolü bu yüzden yerel kontrolden ÖNCE gelir.

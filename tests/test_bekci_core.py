@@ -139,7 +139,7 @@ class PolitikaTest(unittest.TestCase):
         self.assertIs(c.ollama_bulut_mu(base_url="https://ollama.com"), True)
         self.assertIs(c.ollama_bulut_mu(model="gpt-oss:120b-cloud"), True)
         self.assertIs(c.ollama_bulut_mu(provider="ollama-cloud"), True)
-        self.assertIs(c.ollama_bulut_mu(base_url="http://192.168.1.9:11434"), False)
+        self.assertIs(c.ollama_bulut_mu(base_url="http://10.0.0.1:11434"), False)
         self.assertIs(c.ollama_bulut_mu(base_url="http://127.0.0.1:11434"), False)
 
     def test_bulut_yerel_vekil_arkasinda(self):
@@ -154,7 +154,7 @@ class PolitikaTest(unittest.TestCase):
             True,
         )
         self.assertIs(
-            c.ollama_bulut_mu("ecepc-11435", "http://192.168.1.26:11435/v1", "deepseek-v4.1-flash:cloud"),
+            c.ollama_bulut_mu("lan-vekil-11435", "http://10.0.0.2:11435/v1", "deepseek-v4.1-flash:cloud"),
             True,
         )
         # Aynı vekil üzerinden gelen YEREL modeller dokunulmaz.
