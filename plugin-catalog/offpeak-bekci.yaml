@@ -9,7 +9,7 @@
 # desktop/, docs/). `/offpeak-kur` + `/offpeak-kaldir` ve cron deposunun salt-okunması bu commit'te: W4b, 2026-10-16.
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
-sha: f3a2d98ba834f0ac8cc5a426b2102f21fbf25ee7
+sha: 5c877db60d6467464e1107e62f7f24d8ea2aedea
 title: Off-Peak Bekçi
 description: >-
   Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
