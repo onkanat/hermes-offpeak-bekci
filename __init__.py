@@ -43,24 +43,17 @@ _ayar_onbellek: Dict[str, Any] = {"ts": 0.0, "ayar": dict(core.VARSAYILAN_AYARLA
 
 # ── Ayarlar ───────────────────────────────────────────────────────────
 def _ham_ayarlar(ctx: Any = None) -> Dict[str, Any]:
-    """Ayarları toplar: ``config.yaml`` → ``offpeak-bekci:`` bloğu, sonra plugin ayar katmanı.
+    """Ayarları toplar: plugin ayar katmanı, sonra ``config.yaml`` → ``offpeak-bekci:`` bloğu.
 
-    Etkin sıra ``core.AYAR_KATMAN_SIRASI``dır: ``ctx.config`` (``plugins.entries.offpeak-bekci``
-    → ``settings.*``) bloğu **ezer** — sunucunun uyguladığı eşik masaüstünün gösterdiği ayardan
-    ayrışmasın ve aynı eklenti profil başına farklı eşiklerle çalışabilsin. Blok kurulumun onaylı
-    eşikleridir ve şema varsayılanını ezer. Varsayılanlar ``plugin.yaml`` → ``config_schema``'dan
-    gelir (``core.VARSAYILAN_AYARLAR``); burada kullanıcıya özel hiçbir değer sabitlenmez. Eski ad
+    Etkin sıra ``core.AYAR_KATMAN_SIRASI``dır (şartname W4a-1): kurulumun onaylı eşik bloğu
+    ``ctx.config`` (``plugins.entries.offpeak-bekci`` → ``settings.*``) katmanını **ezer** — onaylı
+    eşiği masaüstü değeri sessizce gevşetmesin. ``ctx.config`` bloğun bildirmediği anahtarları
+    doldurur (yazılmamış anahtarın ``ctx.get_config`` çağrısı ``None`` döner, katman boş kalır) ve
+    şema varsayılanını ezer. Varsayılanlar ``plugin.yaml`` → ``config_schema``'dan gelir
+    (``core.VARSAYILAN_AYARLAR``); burada kullanıcıya özel hiçbir değer sabitlenmez. Eski ad
     ``t30_dk`` (varsa) kanonik ``on_bildirim_dk``'ya çevrilir.
     """
     ham: Dict[str, Any] = {}
-    try:
-        from hermes_cli.config import load_config_readonly
-
-        blok = (load_config_readonly() or {}).get(_ID)
-        if isinstance(blok, dict):
-            ham.update(blok)
-    except Exception as exc:  # kurulum bozuksa varsayılanlarla devam
-        logger.debug("offpeak-bekci: config okunamadı (%s)", exc)
     if ctx is not None:
         for anahtar in list(core.VARSAYILAN_AYARLAR) + list(core.AYAR_ALIASLARI):
             try:
@@ -69,6 +62,14 @@ def _ham_ayarlar(ctx: Any = None) -> Dict[str, Any]:
                 deger = None
             if deger is not None:
                 ham[anahtar] = deger
+    try:
+        from hermes_cli.config import load_config_readonly
+
+        blok = (load_config_readonly() or {}).get(_ID)
+        if isinstance(blok, dict):
+            ham.update(blok)
+    except Exception as exc:  # kurulum bozuksa varsayılanlarla devam
+        logger.debug("offpeak-bekci: config okunamadı (%s)", exc)
     return ham
 
 

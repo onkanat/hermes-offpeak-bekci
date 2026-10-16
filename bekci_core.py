@@ -44,12 +44,13 @@ PENCERE_OFFPEAK = "off-peak"
 #: ``__init__._ham_ayarlar`` bunu uygular, ``tests/test_ayar_zinciri.py`` ölçer.
 #: Kullanıcıya özel hiçbir yol/değer bu modülde sabitlenmez (``kuyruk_dosyasi`` dahil).
 AYAR_KATMAN_SIRASI: Tuple[str, ...] = (
-    # Kullanıcı/masaüstü ayarı (plugins.entries.<id>.settings.*): masaüstünün gösterdiği ayar ile
-    # sunucunun uyguladığı eşik ayrışmasın diye EN ÜSTTE. `ctx.get_config` yalnız gerçekten
-    # yazılmış değeri döndürür; yazılmamışsa blok geçerli kalır.
-    "ctx.config",
-    # Kurulumun kullanıcı onaylı eşik bloğu (config.yaml → offpeak-bekci:); şema varsayılanını ezer.
+    # Kurulumun kullanıcı onaylı eşik bloğu (config.yaml → offpeak-bekci:) — EN ÜSTTE:
+    # şartname W4a-1 (16.10.2026) böyle istiyor; onaylı eşiği masaüstü/ctx değeri sessizce
+    # gevşetemez. Blok, şema varsayılanını da ezer.
     "config.yaml:offpeak-bekci",
+    # Kullanıcı/masaüstü ayarı (plugins.entries.<id>.settings.*): bloğun BILDIRMEDIGI anahtarları
+    # doldurur (yazılmamış anahtar için `ctx.get_config` None döndürür → katman boş kalır).
+    "ctx.config",
     # plugin.yaml → config_schema `default` (hiçbir katman yoksa).
     "sema_varsayilani",
 )

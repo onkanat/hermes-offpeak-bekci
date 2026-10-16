@@ -5,9 +5,9 @@ masaüstü JS) sınar; burada ise **çalışan zincir** sınanır: ``__init__._h
 hangi katmanın üstüne koyuyor? Beyan (``bekci_core.AYAR_KATMAN_SIRASI`` + ``plugin.yaml``) ile
 davranış ayrışırsa burada yakalanır.
 
-Etkin sıra (yüksekten düşüğe) — ``bekci_core.AYAR_KATMAN_SIRASI``:
-  1. ``ctx.config``      → ``plugins.entries.offpeak-bekci.settings.*`` (kullanıcı/masaüstü ayarı)
-  2. ``config.yaml``     → ``offpeak-bekci:`` bloğu (kurulumun onaylı eşikleri; varsayılanı ezer)
+Etkin sıra (yüksekten düşüğe) — ``bekci_core.AYAR_KATMAN_SIRASI``, şartname W4a-1 md.2:
+  1. ``config.yaml``     → ``offpeak-bekci:`` bloğu (kurulumun ONAYLI eşikleri; ctx'i ve varsayılanı ezer)
+  2. ``ctx.config``      → ``plugins.entries.offpeak-bekci.settings.*`` (bloğun bildirmediği anahtarları doldurur)
   3. şema varsayılanı    → ``plugin.yaml`` → ``config_schema[*].default``
 
 Test hermetiktir: canlı ``config.yaml`` okunmaz — ``hermes_cli.config.load_config_readonly``
@@ -110,19 +110,20 @@ class AyarZinciriTest(unittest.TestCase):
         self.assertEqual(ayar["hedef_hiz_dk"], SEMA_HEDEF_HIZ)
         self.assertEqual(ayar["kuyruk_dosyasi"], SEMA_KUYRUK)
 
-    # ── 1. katman: ctx.config bloğu ezer (beyan edilen sıra) ────────────────────
-    def test_ctx_config_config_blokunu_ezer(self):
+    # ── 1. katman: config.yaml bloğu ctx.config'i ezer (şartname W4a-1 md.2) ────
+    def test_config_bloku_ctx_configi_ezer(self):
         with _SahteHermesConfig({"hedef_hiz_dk": BLOK_HEDEF_HIZ}):
             ayar = core.ayarlari_birlestir(mod._ham_ayarlar(SahteCtx(hedef_hiz_dk=3)))
-        self.assertEqual(ayar["hedef_hiz_dk"], 3)
+        self.assertEqual(ayar["hedef_hiz_dk"], BLOK_HEDEF_HIZ,
+                         "onaylı eşik masaüstü/ctx değeriyle ezilmemeli")
 
-    def test_ctx_yazilmamis_anahtarda_blok_gecerli_kalir(self):
-        """``ctx.get_config`` yalnız yazılmış değeri döndürür: yazılmamış anahtar bloğu gölgelemez."""
-        ctx = SahteCtx(kuru_kosu=False)  # diğer anahtarlar None döner
+    def test_ctx_blokta_olmayan_anahtari_doldurur(self):
+        """``ctx.get_config`` yalnız yazılmış değeri döndürür; blokta olmayan anahtar ctx'ten gelir."""
+        ctx = SahteCtx(kuru_kosu=False, hedef_hiz_dk=3)
         with _SahteHermesConfig({"hedef_hiz_dk": BLOK_HEDEF_HIZ}):
             ayar = core.ayarlari_birlestir(mod._ham_ayarlar(ctx))
-        self.assertEqual(ayar["hedef_hiz_dk"], BLOK_HEDEF_HIZ)
-        self.assertFalse(ayar["kuru_kosu"])
+        self.assertEqual(ayar["hedef_hiz_dk"], BLOK_HEDEF_HIZ)  # blok kazanır
+        self.assertFalse(ayar["kuru_kosu"])                     # blokta yok → ctx doldurdu
 
     def test_eski_ad_t30_dk_kanonik_ada_cevrilir(self):
         with _SahteHermesConfig(None):
@@ -131,16 +132,17 @@ class AyarZinciriTest(unittest.TestCase):
 
     # ── Önbellek: TTL içinde tekrar okuma aynı sonucu verir ─────────────────────
     def test_ayarlar_ttl_icinde_onbellekten_doner(self):
+        # kuru_kosu bloğun bildirmediği anahtar → ctx'ten gelir, TTL etkisi ölçülebilir.
         with _SahteHermesConfig({"hedef_hiz_dk": BLOK_HEDEF_HIZ}):
-            ilk = mod._ayarlar(None)
-            ikinci = mod._ayarlar(SahteCtx(hedef_hiz_dk=3))  # TTL dolmadı → ctx etkisiz
-        self.assertEqual(ilk["hedef_hiz_dk"], BLOK_HEDEF_HIZ)
-        self.assertEqual(ikinci["hedef_hiz_dk"], BLOK_HEDEF_HIZ)
+            ilk = mod._ayarlar(SahteCtx(kuru_kosu=False))
+            ikinci = mod._ayarlar(SahteCtx(kuru_kosu=True))  # TTL dolmadı → ctx etkisiz
+        self.assertFalse(ilk["kuru_kosu"])
+        self.assertFalse(ikinci["kuru_kosu"])
         with mod._kilit:  # TTL sıfırlanınca yeni katman etkili olur
             mod._ayar_onbellek["ts"] = 0.0
         with _SahteHermesConfig({"hedef_hiz_dk": BLOK_HEDEF_HIZ}):
-            ucuncu = mod._ayarlar(SahteCtx(hedef_hiz_dk=3))
-        self.assertEqual(ucuncu["hedef_hiz_dk"], 3)
+            ucuncu = mod._ayarlar(SahteCtx(kuru_kosu=True))
+        self.assertTrue(ucuncu["kuru_kosu"])
 
 
 class ZincirBeyaniTest(unittest.TestCase):
@@ -149,7 +151,7 @@ class ZincirBeyaniTest(unittest.TestCase):
     def test_katman_sirasi_sabiti_beklenen(self):
         self.assertEqual(
             tuple(core.AYAR_KATMAN_SIRASI),
-            ("ctx.config", "config.yaml:offpeak-bekci", "sema_varsayilani"),
+            ("config.yaml:offpeak-bekci", "ctx.config", "sema_varsayilani"),
         )
 
     def test_plugin_yaml_katman_sirasini_ayni_beyan_eder(self):
@@ -157,10 +159,10 @@ class ZincirBeyaniTest(unittest.TestCase):
         self.assertIn("AYAR_KATMAN_SIRASI", metin, "plugin.yaml beyanı koda atıf vermiyor")
         baslik = metin.index("ETKİN DEĞER SIRASI")
         bolum = metin[baslik:metin.index("\n#\n", baslik)]
-        self.assertLess(bolum.index("ctx.config"), bolum.index("offpeak-bekci:"),
-                        "plugin.yaml beyanında ctx.config bloktan önce gelmiyor")
-        self.assertLess(bolum.index("offpeak-bekci:"), bolum.index("`default`"),
-                        "plugin.yaml beyanında blok `default`tan önce gelmiyor")
+        self.assertLess(bolum.index("offpeak-bekci:"), bolum.index("ctx.config"),
+                        "plugin.yaml beyanında blok ctx.config'ten önce gelmiyor")
+        self.assertLess(bolum.index("ctx.config"), bolum.index("`default`"),
+                        "plugin.yaml beyanında ctx.config `default`tan önce gelmiyor")
 
 
 if __name__ == "__main__":
