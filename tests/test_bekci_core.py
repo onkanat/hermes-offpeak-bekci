@@ -142,6 +142,26 @@ class PolitikaTest(unittest.TestCase):
         self.assertIs(c.ollama_bulut_mu(base_url="http://192.168.1.9:11434"), False)
         self.assertIs(c.ollama_bulut_mu(base_url="http://127.0.0.1:11434"), False)
 
+    def test_bulut_yerel_vekil_arkasinda(self):
+        """Filonun GERÇEK deseni: bulut modeli YEREL vekil üzerinden çağrılır.
+
+        Regresyon (16.10.2026'da ölçüldü): yerel işaret kontrolü model kontrolünden önce
+        yapılırsa bu çağrılar görünmez olur — ölçüm defterine hiç kayıt düşmez ve eklenti
+        bu filoda hiçbir bulut çağrısını görmez.
+        """
+        self.assertIs(
+            c.ollama_bulut_mu("ollama-launch", "http://127.0.0.1:11434/v1", "deepseek-v4.1-flash:cloud"),
+            True,
+        )
+        self.assertIs(
+            c.ollama_bulut_mu("ecepc-11435", "http://192.168.1.26:11435/v1", "deepseek-v4.1-flash:cloud"),
+            True,
+        )
+        # Aynı vekil üzerinden gelen YEREL modeller dokunulmaz.
+        self.assertIs(c.ollama_bulut_mu("ollama-launch", "http://127.0.0.1:11434/v1", "qwen3:4b"), False)
+        self.assertIs(c.ollama_bulut_mu(model="gemma4:latest"), False)
+        self.assertIs(c.ollama_bulut_mu(model="mycloud"), False)
+
     def test_ayarlari_birlestir_ve_yol(self):
         a = c.ayarlari_birlestir({"t30_dk": "15", "bilinmeyen": 1})  # t30_dk = eski ad
         self.assertEqual(a["on_bildirim_dk"], 15)

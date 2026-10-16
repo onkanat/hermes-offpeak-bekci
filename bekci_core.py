@@ -247,6 +247,10 @@ _YEREL_ISARETLERI = (
     "127.0.0.1", "localhost", "0.0.0.0", "::1", ".local", "host.docker.internal",
     "192.168.", "10.0.", "172.16.",
 )
+#: Model adındaki bulut işareti. Ollama Cloud'un kendi adlandırması ``-cloud`` (gpt-oss:120b-cloud),
+#: bu filonun vekil arkasındaki bulut modelleri ise ``:cloud`` (deepseek-v4.1-flash:cloud) —
+#: iki biçim de buluttur; ``cloud`` kelime sınırıyla aranır ki ``mycloud`` gibi adlar eşleşmesin.
+_MODEL_BULUT_DESENI = re.compile(r"(?:^|[-_:/])cloud(?:$|[-_:/])")
 
 
 def ollama_bulut_mu(
@@ -262,14 +266,19 @@ def ollama_bulut_mu(
     p = str(provider or "").strip().lower()
     u = str(base_url or "").strip().lower()
     m = str(model or "").strip().lower()
-    if any(y in u for y in _YEREL_ISARETLERI):
-        return False
+    # 1) MODEL ADI bulut işareti taşıyorsa buluttur — uç yerel vekil olsa bile.
+    #    Bu filoda bulut modelleri yerel vekil üzerinden çağrılır (127.0.0.1:11434 → ollama.com/v1,
+    #    ECE vekili 192.168.1.26:11435) ve adları ':cloud' ile biter (deepseek-v4.1-flash:cloud);
+    #    yani base_url tek başına bulutu göstermez. Yerel işaretleri önce kontrol etmek
+    #    (eski davranış) bulut çağrılarını TAMAMEN görünmez kılıyordu: ölçüm defterine hiç
+    #    kayıt düşmüyordu. Model kontrolü bu yüzden yerel kontrolden ÖNCE gelir.
+    if _MODEL_BULUT_DESENI.search(m):
+        return True
     if any(b in u for b in _BULUT_ISARETLERI):
         return True
     if any(b in p for b in _BULUT_ISARETLERI):
         return True
-    if m.endswith("-cloud") or "-cloud-" in m:
-        return True
+    # 2) Hiçbir bulut işareti yok → yerel/LAN Ollama ya da Ollama dışı: off-peak penceresi yok, dokunma.
     return False
 
 
