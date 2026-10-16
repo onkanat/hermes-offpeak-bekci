@@ -1,7 +1,13 @@
 """offpeak-bekci — saf çekirdek: pencere matematiği, kuyruk ayrıştırma, gecikme/kota politikası.
 
-Bu modül bilerek yalnızca standart kütüphaneyi kullanır: ağ yok, dosya yok, saat okuma yok.
-Her karar fonksiyonu **saf** — "şimdi" parametre olarak girer, aynı girdi aynı çıktıyı verir.
+Bu modül bilerek yalnızca standart kütüphaneyi kullanır: ağ yok, saat okuma yok, karar
+fonksiyonlarında dosya erişimi yok. Her karar fonksiyonu **saf** — "şimdi" parametre olarak
+girer, aynı girdi aynı çıktıyı verir.
+
+Tek istisna ayar katmanıdır: varsayılanlar import anında ``plugin.yaml`` → ``config_schema``
+bölümünden OKUNUR (tek beyan kaynağı; ``_sema_varsayilanlari``). Dosya okunamaz/bozuksa gömülü
+yedeğe düşülür ve `tests/test_ayarlar.py` iki tarafın ayrışmadığını doğrular. Bu okuma yalnızca
+import sırasında bir kez olur; hiçbir karar fonksiyonu dosya/ağ/saat görmez.
 Bu yüzden pencere sınırları, gecikme tavanı ve "pencere başına bir kez" bayrağı gerçek saate
 bağlı olmadan test edilebilir (bkz. ``tests/``).
 
@@ -33,26 +39,93 @@ PEAK_BITIS_SAAT = 18  # hariç
 PENCERE_PEAK = "peak"
 PENCERE_OFFPEAK = "off-peak"
 
-#: Ayarların tek doğruluk kaynağı; ``config.yaml`` → ``offpeak-bekci:`` bloğu bunları ezer.
-VARSAYILAN_AYARLAR: Dict[str, Any] = {
-    # Yalnız ölç, geciktirme. Canlıya almak için config.yaml'da kuru_kosu: false.
+#: Ayarların TEK BEYAN KAYNAĞI ``plugin.yaml`` → ``config_schema``'dır; varsayılanlar aşağıda
+#: import anında oradan okunur. Etkin değer sırası (yüksekten düşüğe): ``config.yaml`` →
+#: ``offpeak-bekci:`` bloğu > masaüstü ``ctx.config`` > bu varsayılanlar.
+#: Kullanıcıya özel hiçbir yol/değer bu modülde sabitlenmez (``kuyruk_dosyasi`` dahil).
+_AYAR_SIRASI: Tuple[str, ...] = (
+    "kuru_kosu",
+    "kuyruk_dosyasi",
+    "schedule",
+    "on_bildirim_dk",
+    "kota_token_gun",
+    "cache_read_tavani_gun",
+    "hedef_hiz_dk",
+    "erteleme_tavani_sn",
+    "off_peak_only_isler",
+    "pencere_sn",
+    "kota_penceresi_sn",
+    "kota_tavani",
+    "olcum_dosyasi",
+)
+
+#: ``plugin.yaml`` okunamazsa (yok/bozuk ortam) kullanılan yedek. Asıl kaynak ``plugin.yaml``'dır;
+#: ``tests/test_ayarlar.py`` bu yedeğin şemayla ayrışmasını test eder.
+_SEMA_YEDEGI: Dict[str, Any] = {
     "kuru_kosu": True,
-    # peak penceresinde dakikada en fazla kaç çağrı (kayan 60 sn penceresi)
+    "kuyruk_dosyasi": "~/.hermes/offpeak-bekci/kuyruk.md",
+    "schedule": "5 18 * * 1-5",
+    "on_bildirim_dk": 30,
+    "kota_token_gun": 0,
+    "cache_read_tavani_gun": 0,
     "hedef_hiz_dk": 6,
-    # kayan pencerenin uzunluğu (sn)
-    "pencere_sn": 60.0,
-    # tek bir istek için en fazla bekleme (sn) — gecikmenin tavanı
     "erteleme_tavani_sn": 30.0,
-    # kota sayacının penceresi (sn) ve tavanı (çağrı); tavan aşılırsa uyarı kaydı yazılır
+    "off_peak_only_isler": [],
+    "pencere_sn": 60.0,
     "kota_penceresi_sn": 3600.0,
     "kota_tavani": 120,
-    # onay bekleyen kalemlerin listesi (kullanıcı dosyası — eklenti içeriğini yazmaz)
-    "kuyruk_dosyasi": "~/MacAir/off-peak-kuyruk.md",
-    # ölçüm/uyarı günlüğü (JSONL, yerel; ağ yok)
     "olcum_dosyasi": "~/.hermes/offpeak-bekci/olcum.jsonl",
-    # off-peak'e kaç dakika kala hatırlatma penceresi başlar
-    "t30_dk": 30,
 }
+
+#: ``t30_dk`` eski ayar adı → kanonik adı (bkz. ``ayarlari_birlestir``). Dışarıdan da okunur
+#: (``__init__._ham_ayarlar`` eski adı masaüstü ``ctx.config``inden kabul eder).
+AYAR_ALIASLARI: Dict[str, str] = {"t30_dk": "on_bildirim_dk"}
+
+
+def sema_yolu() -> str:
+    """``plugin.yaml`` yolu (repo kökü ya da kurulu eklenti dizini)."""
+    import os
+
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugin.yaml")
+
+
+def _plugin_semasi(yol: Optional[str] = None) -> Dict[str, Any]:
+    """``plugin.yaml`` → ``config_schema`` sözlüğü; okunamaz/bozuksa boş sözlük (hata atmaz)."""
+    try:
+        import yaml  # hermes-agent'ın kendi bağımlılığı; yoksa gömülü yedeğe düşeriz
+    except Exception:  # pragma: no cover — PyYAML'sız ortam
+        return {}
+    try:
+        with open(yol or sema_yolu(), "r", encoding="utf-8") as f:
+            veri = yaml.safe_load(f)
+    except Exception:  # dosya yok / izin / bozuk YAML
+        return {}
+    sema = (veri or {}).get("config_schema") if isinstance(veri, dict) else None
+    return dict(sema) if isinstance(sema, dict) else {}
+
+
+def _sema_varsayilanlari(sema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """``plugin.yaml`` varsayılanlarını ``_AYAR_SIRASI`` düzeninde döndürür.
+
+    Şemada olmayan/``default`` taşımayan anahtar için gömülü yedeğe düşülür. ``sema`` parametresi
+    test/gömleme için verilebilir (``None`` → ``plugin.yaml`` okunur).
+    """
+    s = _plugin_semasi() if sema is None else sema
+    ayar: Dict[str, Any] = {}
+    for anahtar in _AYAR_SIRASI:
+        spec = s.get(anahtar) if isinstance(s, dict) else None
+        yedek = _SEMA_YEDEGI.get(anahtar)
+        deger = spec.get("default") if isinstance(spec, dict) and "default" in spec else yedek
+        ayar[anahtar] = list(deger) if isinstance(deger, (list, tuple)) else deger
+    for anahtar, spec in (s or {}).items():  # şemaya sonradan eklenen anahtarlar da görünür olsun
+        if anahtar in ayar or not isinstance(spec, dict) or "default" not in spec:
+            continue
+        deger = spec["default"]
+        ayar[anahtar] = list(deger) if isinstance(deger, (list, tuple)) else deger
+    return ayar
+
+
+VARSAYILAN_AYARLAR: Dict[str, Any] = _sema_varsayilanlari()
 
 
 # ── Yardımcılar ───────────────────────────────────────────────────────
@@ -110,11 +183,12 @@ def geri_sayim(simdi: _dt.datetime) -> str:
     return f"{saat:02d}:{dk:02d}"
 
 
-def offpeak_hatirlatma_mi(simdi: _dt.datetime, t30_dk: int = 30) -> bool:
-    """Off-peak'e ``t30_dk`` dakika veya daha az kaldıysa True (yalnız peak'te)."""
+def offpeak_hatirlatma_mi(simdi: _dt.datetime, on_bildirim_dk: int = 30) -> bool:
+    """Off-peak'e ``on_bildirim_dk`` (eski adı ``t30_dk``) dakika veya daha az kaldıysa True
+    (yalnız peak'te)."""
     if not peak_mi(simdi):
         return False
-    return kalan_saniye(simdi) <= max(0, int(t30_dk)) * 60
+    return kalan_saniye(simdi) <= max(0, int(on_bildirim_dk)) * 60
 
 
 def offpeak_anahtari(simdi: _dt.datetime) -> str:
@@ -135,8 +209,12 @@ def offpeak_anahtari(simdi: _dt.datetime) -> str:
     return bas.isoformat()
 
 
-def ozet(simdi: _dt.datetime, t30_dk: int = 30) -> Dict[str, Any]:
-    """Rozet/komut için tek çağrıda pencere özeti (saf)."""
+def ozet(simdi: _dt.datetime, on_bildirim_dk: int = 30) -> Dict[str, Any]:
+    """Rozet/komut için tek çağrıda pencere özeti (saf).
+
+    Ayar adı ``on_bildirim_dk``; dönen sözlükteki ``t30_dk``/``t30_icerisinde`` alanları bu
+    ayarın türevi olarak AYNI adla kalır (masaüstü çekirdeği ve testler bu adları bekler).
+    """
     s = utc(simdi)
     gelecek_ad, gelecek_an = sonraki_gecis(s)
     return {
@@ -146,8 +224,8 @@ def ozet(simdi: _dt.datetime, t30_dk: int = 30) -> Dict[str, Any]:
         "gelecek_gecis_utc": gelecek_an.isoformat(),
         "kalan_sn": kalan_saniye(s),
         "geri_sayim": geri_sayim(s),
-        "t30_dk": int(t30_dk),
-        "t30_icerisinde": offpeak_hatirlatma_mi(s, t30_dk),
+        "t30_dk": int(on_bildirim_dk),
+        "t30_icerisinde": offpeak_hatirlatma_mi(s, on_bildirim_dk),
         "offpeak_anahtari": offpeak_anahtari(s),
     }
 
@@ -692,20 +770,60 @@ def _sayi(deger: Any, varsayilan: Any) -> Any:
             return varsayilan
 
 
+def _liste(deger: Any, varsayilan: Any) -> List[Any]:
+    """Liste ayarı: liste gelirse kopyası; metinse virgülle bölünmüş parçalar; aksi hâlde yedek."""
+    if isinstance(deger, (list, tuple)):
+        return list(deger)
+    if isinstance(deger, str):
+        return [p.strip() for p in deger.split(",") if p.strip()]
+    return list(varsayilan or [])
+
+
+def schedule_gecerli_mi(schedule: Any) -> bool:
+    """``schedule`` 5 alanlı cron ifadesi mi? (Eklenti cron KURMAZ; yalnız beyan doğrulaması.)"""
+    alanlar = str(schedule or "").split()
+    if len(alanlar) != 5:
+        return False
+    izinli = re.compile(r"^[0-9A-Za-z*,\-/]+$")
+    return all(izinli.match(alan) for alan in alanlar)
+
+
+def etkin_ayarlar(ayar: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Durum/komut uçları için ayarların dışa vurumu (yalnız beyan edilen anahtarlar; sır yok).
+
+    Masaüstü yarısı ayarları bu sözlükten okur (``/offpeak-durum`` yanıtındaki ``ayar`` alanı).
+    """
+    a = dict(ayar or VARSAYILAN_AYARLAR)
+    veri = {anahtar: a.get(anahtar, VARSAYILAN_AYARLAR.get(anahtar)) for anahtar in VARSAYILAN_AYARLAR}
+    veri["schedule_gecerli"] = schedule_gecerli_mi(veri.get("schedule"))
+    veri["varsayilanlar"] = {k: (list(v) if isinstance(v, list) else v) for k, v in VARSAYILAN_AYARLAR.items()}
+    return veri
+
+
 def ayarlari_birlestir(ham: Optional[Dict[str, Any]]) -> Dict[str, Any]:
-    """Bilinmeyen anahtarları yok sayar, tipleri varsayılana göre zorlar."""
-    ayar = dict(VARSAYILAN_AYARLAR)
+    """Bilinmeyen anahtarları yok sayar, tipleri varsayılana göre zorlar.
+
+    ``t30_dk`` eski adı ``on_bildirim_dk`` için takma addır; ikisi de verilirse kanonik ad kazanır.
+    Liste ayarları (``off_peak_only_isler``) kopyalanır — çağıranın listesi paylaşılmaz.
+    """
+    ayar = {k: (list(v) if isinstance(v, list) else v) for k, v in VARSAYILAN_AYARLAR.items()}
     if not isinstance(ham, dict):
         return ayar
+    temiz = dict(ham)
+    for eski, yeni in AYAR_ALIASLARI.items():
+        if yeni not in temiz and temiz.get(eski) is not None:
+            temiz[yeni] = temiz[eski]
     for anahtar, varsayilan in VARSAYILAN_AYARLAR.items():
-        if anahtar not in ham or ham[anahtar] is None:
+        if anahtar not in temiz or temiz[anahtar] is None:
             continue
         if isinstance(varsayilan, bool):
-            ayar[anahtar] = _bool(ham[anahtar])
+            ayar[anahtar] = _bool(temiz[anahtar])
+        elif isinstance(varsayilan, list):
+            ayar[anahtar] = _liste(temiz[anahtar], varsayilan)
         elif isinstance(varsayilan, (int, float)):
-            ayar[anahtar] = _sayi(ham[anahtar], varsayilan)
+            ayar[anahtar] = _sayi(temiz[anahtar], varsayilan)
         else:
-            ayar[anahtar] = str(ham[anahtar])
+            ayar[anahtar] = str(temiz[anahtar])
     return ayar
 
 

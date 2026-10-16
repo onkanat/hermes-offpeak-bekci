@@ -65,8 +65,8 @@ function depoYap(ctx) {
 
 let depo = null
 
-/** Backend `/offpeak-durum` yanıtından kuyruk sayılarını çıkarır (defansif). */
-export function yanitCoz(yanit) {
+/** Yanıttan JSON gövdesini çıkarır (`slash.exec` çıktısı sarılı gelebilir). */
+export function jsonBul(yanit) {
   const ham = typeof yanit === 'string' ? yanit : yanit?.result ?? yanit?.output ?? yanit
 
   if (typeof ham !== 'string') {
@@ -77,11 +77,18 @@ export function yanitCoz(yanit) {
   if (!m) {
     return null
   }
-  let veri = null
-
   try {
-    veri = JSON.parse(m[0])
+    return JSON.parse(m[0])
   } catch {
+    return null
+  }
+}
+
+/** Backend `/offpeak-durum` yanıtından kuyruk sayılarını çıkarır (defansif). */
+export function yanitCoz(yanit) {
+  const veri = jsonBul(yanit)
+
+  if (!veri) {
     return null
   }
 
@@ -93,6 +100,39 @@ export function yanitCoz(yanit) {
   }
 
   return { bekleyen: bulunan.bekleyen ?? 0, onaylı: bulunan['onaylı'] ?? 0, toplam: bulunan.toplam }
+}
+
+/** Aynı yanıttan backend'in beyan ettiği ETKİN ayarları çıkarır (yoksa null).
+ *
+ * Backend `ayar` alanı `bekci_core.etkin_ayarlar()` çıktısıdır (13 ortak ayar + `varsayilanlar`
+ * + `schedule_gecerli`); `ayarlariBirlestir` yalnız beyan edilen anahtarları alır.
+ */
+export function ayarCoz(yanit) {
+  const veri = jsonBul(yanit)
+
+  if (!veri) {
+    return null
+  }
+
+  return derinAyarBul(veri, 0)
+}
+
+function derinAyarBul(dugum, derinlik) {
+  if (!dugum || typeof dugum !== 'object' || derinlik > 4) {
+    return null
+  }
+  if (dugum.varsayilanlar && typeof dugum.varsayilanlar === 'object') {
+    return dugum // `etkin_ayarlar()` imzası: ayar sözlüğü + varsayılanlar
+  }
+  for (const deger of Object.values(dugum)) {
+    const bulunan = derinAyarBul(deger, derinlik + 1)
+
+    if (bulunan) {
+      return bulunan
+    }
+  }
+
+  return null
 }
 
 function derinKuyrukBul(dugum, derinlik) {
@@ -157,9 +197,26 @@ async function sayilariTazele() {
   try {
     const yanit = await host.request('slash.exec', { session_id: sid, command: 'offpeak-durum' })
     const yeni = yanitCoz(yanit)
+    const uzakAyar = ayarCoz(yanit)
 
+    // Backend etkin ayarları (config.yaml + plugin ayarları) beyan eder: rozet onları izler,
+    // böylece kullanıcı eşiği değiştirdiğinde masaüstü yarısı da aynı davranışa geçer.
+    if (uzakAyar) {
+      const yerel = ctxRef && typeof ctxRef.config === 'object' ? ctxRef.config : null
+
+      ayar = ayarlariBirlestir(yerel, uzakAyar)
+      // Son beyanı `ctx.storage`a yaz: eklenti yeniden yüklenirse backend yanıtı gelene
+      // kadar rozet aynı eşiklerle çizilir (ayar yalnız burada, ayrı kopya tutulmaz).
+      try {
+        depo?.set?.('ayar', ayar)
+      } catch {
+        /* depo yok: yerel hesapla devam */
+      }
+    }
     if (yeni) {
       sonSayilar = yeni
+    }
+    if (yeni || uzakAyar) {
       tikle()
     }
   } catch {
@@ -217,7 +274,11 @@ export default {
     ctxRef = ctx
     depo = depoYap(ctx)
     try {
-      ayar = { ...VARSAYILAN_AYAR, ...(typeof ctx.config === 'object' && ctx.config ? ctx.config : {}) }
+      // Ayar sırası: varsayılan → ctx.storage (son oturumun backend beyanı) → ctx.config
+      // → backend `/offpeak-durum` yanıtı (aşağıda `sayilariTazele` içinde).
+      const onceki = depo.get('ayar', null)
+
+      ayar = ayarlariBirlestir(onceki, typeof ctx.config === 'object' ? ctx.config : null)
     } catch {
       ayar = { ...VARSAYILAN_AYAR }
     }

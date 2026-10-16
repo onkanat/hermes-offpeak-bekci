@@ -46,7 +46,9 @@ def _ham_ayarlar(ctx: Any = None) -> Dict[str, Any]:
     """Ayarları toplar: ``config.yaml`` → ``offpeak-bekci:`` bloğu, sonra plugin ayar katmanı.
 
     ``plugins.entries.offpeak-bekci.settings.*`` (``ctx.get_config``) bloğu **ezer**; böylece
-    aynı eklenti profil başına farklı eşiklerle çalışabilir.
+    aynı eklenti profil başına farklı eşiklerle çalışabilir. Varsayılanlar ``plugin.yaml`` →
+    ``config_schema``'dan gelir (``core.VARSAYILAN_AYARLAR``); burada kullanıcıya özel hiçbir
+    değer sabitlenmez. Eski ad ``t30_dk`` (varsa) kanonik ``on_bildirim_dk``'ya çevrilir.
     """
     ham: Dict[str, Any] = {}
     try:
@@ -58,7 +60,7 @@ def _ham_ayarlar(ctx: Any = None) -> Dict[str, Any]:
     except Exception as exc:  # kurulum bozuksa varsayılanlarla devam
         logger.debug("offpeak-bekci: config okunamadı (%s)", exc)
     if ctx is not None:
-        for anahtar in core.VARSAYILAN_AYARLAR:
+        for anahtar in list(core.VARSAYILAN_AYARLAR) + list(core.AYAR_ALIASLARI):
             try:
                 deger = ctx.get_config(anahtar, None)
             except Exception:
@@ -168,7 +170,7 @@ def _gecikme_kapisi(ctx: Any = None) -> Callable[..., Any]:
 def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
     ayar = _ayarlar(ctx)
     simdi = core.utc()
-    o = core.ozet(simdi, ayar["t30_dk"])
+    o = core.ozet(simdi, ayar["on_bildirim_dk"])
     kalemler, hata = _kuyruk_oku(ayar)
     sayilar = core.kuyruk_sayilari(kalemler)
     ts = simdi.timestamp()
@@ -192,6 +194,9 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
         "kuyruk_dosyasi": str(_kuyruk_yolu(ayar)),
         "kuyruk_dosyasi_var": hata is None,
         "kuyruk_hata": hata,
+        # Etkin ayarlar + varsayılanlar: masaüstü yarısı ayarları bu alandan okur
+        # (bkz. desktop/kabuk.js → `ayar`), kullanıcı ayarı değiştirince davranış burada görünür.
+        "ayar": core.etkin_ayarlar(ayar),
     })
     return veri
 

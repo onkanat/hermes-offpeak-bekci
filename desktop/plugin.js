@@ -49,17 +49,176 @@ export const ONAYLI = 'onaylı'
 export const BEKLIYOR = 'bekliyor'
 
 /** Kuyruk kalemi bildirim eşiği: pencere açılmadan bu kadar dakika önce (eşik E1). */
-export const T30_DK = 30
+export const ON_BILDIRIM_DK = 30
+
+/** Eski ad (geriye uyum) — `plugin.yaml`'daki ayar adı `on_bildirim_dk`'dır. */
+export const T30_DK = ON_BILDIRIM_DK
 
 /** Rozet başlığında gösterilen kaynak cümlesi. */
 export const KAYNAK =
   'Ollama: "Off-peak pricing apply outside 12:00 and 18:00 UTC on weekdays and all day on weekends."'
 
+/**
+ * Ortak ayar adları — py `bekci_core.VARSAYILAN_AYARLAR` (= `plugin.yaml` → `config_schema`)
+ * ile AYNI küme. Yeni ayar eklerken ikisi birlikte büyür: `tests/test_ayarlar.py` ayrışmayı
+ * yakalar (bu liste `plugin.yaml`'dan türetilmez çünkü masaüstü dosyası tek başına yüklenir).
+ */
+export const ORTAK_AYAR_ANAHTARLARI = [
+  'kuru_kosu',
+  'kuyruk_dosyasi',
+  'schedule',
+  'on_bildirim_dk',
+  'kota_token_gun',
+  'cache_read_tavani_gun',
+  'hedef_hiz_dk',
+  'erteleme_tavani_sn',
+  'off_peak_only_isler',
+  'pencere_sn',
+  'kota_penceresi_sn',
+  'kota_tavani',
+  'olcum_dosyasi'
+]
+
+/** Yalnız masaüstü yarısına özel ayarlar (çekirdek/backend karşılığı yok). */
+export const YEREL_AYAR_ANAHTARLARI = ['tik_ms', 'geri_sayim_esigi_sn']
+
+/**
+ * Varsayılanlar — BEYAN KAYNAĞI değil, masaüstü yedeği: gerçek varsayılanlar `plugin.yaml` →
+ * `config_schema`'dadır ve backend `/offpeak-durum` yanıtının `ayar` alanıyla gelir. Burada
+ * yalnız ağ erişilemezken makul bir rozet çizilecek kadar genel değer durur. Kullanıcıya özel
+ * hiçbir yol/değer gömülmez (kuyruk dosyası dahil).
+ */
 export const VARSAYILAN_AYAR = {
-  t30_dk: T30_DK,
+  on_bildirim_dk: ON_BILDIRIM_DK,
+  kuru_kosu: true,
+  kuyruk_dosyasi: '~/.hermes/offpeak-bekci/kuyruk.md',
   tik_ms: 30_000,
-  geri_sayim_esigi_sn: 12 * 60 * 60,
-  kuyruk_dosyasi: '~/MacAir/off-peak-kuyruk.md'
+  geri_sayim_esigi_sn: 12 * 60 * 60
+}
+
+/**
+ * Ortak ayarların TİPLERİ — py `ayarlari_birlestir` ile aynı zorlama, `plugin.yaml` → `type`
+ * alanının masaüstü yansıması. `tests/test_ayarlar.py` bu haritayı `plugin.yaml` tipleriyle
+ * karşılaştırır: yeni ayar eklerken buranın atlanması sessizce geçmez.
+ */
+export const AYAR_TIPLERI = {
+  kuru_kosu: 'mantik',
+  kuyruk_dosyasi: 'metin',
+  schedule: 'metin',
+  on_bildirim_dk: 'tam',
+  kota_token_gun: 'tam',
+  cache_read_tavani_gun: 'tam',
+  hedef_hiz_dk: 'tam',
+  erteleme_tavani_sn: 'ondalik',
+  off_peak_only_isler: 'liste',
+  pencere_sn: 'ondalik',
+  kota_penceresi_sn: 'ondalik',
+  kota_tavani: 'tam',
+  olcum_dosyasi: 'metin'
+}
+
+/** py `_bool` ile aynı doğru kümesi (kalan her şey yanlış sayılır). */
+const DOGRU_METINLERI = new Set(['1', 'true', 'yes', 'evet', 'on', 'açık', 'acik'])
+
+/** Değeri beyan edilen tipe zorlar; çevrilemeyen değer için `null` (varsayılan korunur). */
+function ayarCevir(ad, deger) {
+  const tip = AYAR_TIPLERI[ad]
+
+  if (tip === 'mantik') {
+    return typeof deger === 'boolean' ? deger : DOGRU_METINLERI.has(String(deger).trim().toLowerCase())
+  }
+  if (tip === 'liste') {
+    if (Array.isArray(deger)) {
+      return [...deger]
+    }
+    if (typeof deger === 'string') {
+      return deger.split(',').map(p => p.trim()).filter(Boolean)
+    }
+
+    return null
+  }
+  if (tip === 'metin') {
+    return String(deger)
+  }
+  if (tip === undefined) {
+    return null // bilinmeyen anahtar (yalnız masaüstüne özel anahtarlar buraya düşer)
+  }
+
+  const sayi = sayiCevir(deger)
+
+  if (sayi === null) {
+    return null
+  }
+
+  return tip === 'tam' ? Math.trunc(sayi) : sayi
+}
+
+/** Sayıya çevirir; boş/çevrilemeyen metin için `null` (py `_sayi` gibi: `''` varsayılanı ezmez). */
+function sayiCevir(deger) {
+  if (typeof deger === 'number') {
+    return Number.isFinite(deger) ? deger : null
+  }
+  const metin = String(deger).trim()
+
+  if (metin === '') {
+    return null
+  }
+  const sayi = Number(metin)
+
+  return Number.isFinite(sayi) ? sayi : null
+}
+
+/** Yalnız masaüstüne özel sayısal ayarı çevirir (çekirdek karşılığı yok). */
+function yerelCevir(deger) {
+  return sayiCevir(deger)
+}
+
+/** Tek kaynağı temizler: bilinmeyen anahtar atılır, eski ad kanonik adına çevrilir, tip zorlanır. */
+function ayarTemizle(kaynak) {
+  const temiz = {}
+  const kanonikGeldi = new Set()
+
+  for (const [anahtar, deger] of Object.entries(kaynak)) {
+    if (deger === null || deger === undefined) {
+      continue
+    }
+    const ad = anahtar === 't30_dk' ? 'on_bildirim_dk' : anahtar
+    const yerel = YEREL_AYAR_ANAHTARLARI.includes(ad)
+
+    if (!yerel && !ORTAK_AYAR_ANAHTARLARI.includes(ad)) {
+      continue
+    }
+    if (kanonikGeldi.has(ad) && anahtar !== ad) {
+      continue // aynı kaynakta kanonik ad takma addan üstündür
+    }
+    const cevrilen = yerel ? yerelCevir(deger) : ayarCevir(ad, deger)
+
+    if (cevrilen === null) {
+      continue // çevrilemeyen değer varsayılanı ezmez
+    }
+    temiz[ad] = cevrilen
+    kanonikGeldi.add(ad)
+  }
+
+  return temiz
+}
+
+/**
+ * Ayar kaynaklarını soldan sağa ezer (son kazanan): varsayılan → `ctx.config` → backend'in
+ * beyan ettiği etkin ayarlar. py `ayarlari_birlestir` ile aynı kurallar (bilinmeyeni at,
+ * `t30_dk` → `on_bildirim_dk`, boş değeri yok say).
+ */
+export function ayarlariBirlestir(...kaynaklar) {
+  const sonuc = { ...VARSAYILAN_AYAR }
+
+  for (const kaynak of kaynaklar) {
+    if (!kaynak || typeof kaynak !== 'object' || Array.isArray(kaynak)) {
+      continue
+    }
+    Object.assign(sonuc, ayarTemizle(kaynak))
+  }
+
+  return sonuc
 }
 
 const GUN_MS = 86_400_000
@@ -115,13 +274,20 @@ export function geriSayim(ms) {
   return `${String(saat).padStart(2, '0')}:${String(dk).padStart(2, '0')}`
 }
 
-/** Off-peak'e `t30Dk` dakika veya daha az kaldıysa true (yalnız peak'te). */
-export function t30Icerisinde(ms, t30Dk = T30_DK) {
+/** Ayar sözlüğünden hatırlatma eşiğini (dk) çıkarır; yoksa genel varsayılan. */
+function ayarDk(ayar) {
+  const ham = ayar?.on_bildirim_dk ?? ayar?.t30_dk
+
+  return Number.isFinite(ham) ? ham : ON_BILDIRIM_DK
+}
+
+/** Off-peak'e `dk` dakika veya daha az kaldıysa true (yalnız peak'te). */
+export function t30Icerisinde(ms, dk = ON_BILDIRIM_DK) {
   if (!peakMi(ms)) {
     return false
   }
 
-  return kalanSaniye(ms) <= Math.max(0, Math.trunc(t30Dk)) * 60
+  return kalanSaniye(ms) <= Math.max(0, Math.trunc(dk)) * 60
 }
 
 /** İçinde olunan/yaklaşılan off-peak bloğunun kimliği (ISO-8601 UTC). */
@@ -140,7 +306,7 @@ export function offpeakAnahtari(ms) {
 
 /** Rozet/komut için tek çağrıda pencere özeti (saf). Python `ozet()` ile aynı anahtarlar. */
 export function ozet(ms, ayar = VARSAYILAN_AYAR) {
-  const t30Dk = Number.isFinite(ayar?.t30_dk) ? ayar.t30_dk : T30_DK
+  const t30Dk = ayarDk(ayar)
   const gecis = sonrakiGecis(ms)
 
   return {
@@ -167,7 +333,7 @@ export function ozet(ms, ayar = VARSAYILAN_AYAR) {
 export function t30Karari(ms, depo, ayar = VARSAYILAN_AYAR) {
   const anahtar = `t30:${offpeakAnahtari(ms)}`
 
-  if (!t30Icerisinde(ms, ayar?.t30_dk ?? T30_DK)) {
+  if (!t30Icerisinde(ms, ayarDk(ayar))) {
     return { gerekli: false, anahtar, sebep: 'pencere-yok' }
   }
   if (depo && depo.get(anahtar, false) === true) {
@@ -588,8 +754,8 @@ function depoYap(ctx) {
 
 let depo = null
 
-/** Backend `/offpeak-durum` yanıtından kuyruk sayılarını çıkarır (defansif). */
-export function yanitCoz(yanit) {
+/** Yanıttan JSON gövdesini çıkarır (`slash.exec` çıktısı sarılı gelebilir). */
+export function jsonBul(yanit) {
   const ham = typeof yanit === 'string' ? yanit : yanit?.result ?? yanit?.output ?? yanit
 
   if (typeof ham !== 'string') {
@@ -600,11 +766,18 @@ export function yanitCoz(yanit) {
   if (!m) {
     return null
   }
-  let veri = null
-
   try {
-    veri = JSON.parse(m[0])
+    return JSON.parse(m[0])
   } catch {
+    return null
+  }
+}
+
+/** Backend `/offpeak-durum` yanıtından kuyruk sayılarını çıkarır (defansif). */
+export function yanitCoz(yanit) {
+  const veri = jsonBul(yanit)
+
+  if (!veri) {
     return null
   }
 
@@ -616,6 +789,39 @@ export function yanitCoz(yanit) {
   }
 
   return { bekleyen: bulunan.bekleyen ?? 0, onaylı: bulunan['onaylı'] ?? 0, toplam: bulunan.toplam }
+}
+
+/** Aynı yanıttan backend'in beyan ettiği ETKİN ayarları çıkarır (yoksa null).
+ *
+ * Backend `ayar` alanı `bekci_core.etkin_ayarlar()` çıktısıdır (13 ortak ayar + `varsayilanlar`
+ * + `schedule_gecerli`); `ayarlariBirlestir` yalnız beyan edilen anahtarları alır.
+ */
+export function ayarCoz(yanit) {
+  const veri = jsonBul(yanit)
+
+  if (!veri) {
+    return null
+  }
+
+  return derinAyarBul(veri, 0)
+}
+
+function derinAyarBul(dugum, derinlik) {
+  if (!dugum || typeof dugum !== 'object' || derinlik > 4) {
+    return null
+  }
+  if (dugum.varsayilanlar && typeof dugum.varsayilanlar === 'object') {
+    return dugum // `etkin_ayarlar()` imzası: ayar sözlüğü + varsayılanlar
+  }
+  for (const deger of Object.values(dugum)) {
+    const bulunan = derinAyarBul(deger, derinlik + 1)
+
+    if (bulunan) {
+      return bulunan
+    }
+  }
+
+  return null
 }
 
 function derinKuyrukBul(dugum, derinlik) {
@@ -680,9 +886,26 @@ async function sayilariTazele() {
   try {
     const yanit = await host.request('slash.exec', { session_id: sid, command: 'offpeak-durum' })
     const yeni = yanitCoz(yanit)
+    const uzakAyar = ayarCoz(yanit)
 
+    // Backend etkin ayarları (config.yaml + plugin ayarları) beyan eder: rozet onları izler,
+    // böylece kullanıcı eşiği değiştirdiğinde masaüstü yarısı da aynı davranışa geçer.
+    if (uzakAyar) {
+      const yerel = ctxRef && typeof ctxRef.config === 'object' ? ctxRef.config : null
+
+      ayar = ayarlariBirlestir(yerel, uzakAyar)
+      // Son beyanı `ctx.storage`a yaz: eklenti yeniden yüklenirse backend yanıtı gelene
+      // kadar rozet aynı eşiklerle çizilir (ayar yalnız burada, ayrı kopya tutulmaz).
+      try {
+        depo?.set?.('ayar', ayar)
+      } catch {
+        /* depo yok: yerel hesapla devam */
+      }
+    }
     if (yeni) {
       sonSayilar = yeni
+    }
+    if (yeni || uzakAyar) {
       tikle()
     }
   } catch {
@@ -740,7 +963,11 @@ export default {
     ctxRef = ctx
     depo = depoYap(ctx)
     try {
-      ayar = { ...VARSAYILAN_AYAR, ...(typeof ctx.config === 'object' && ctx.config ? ctx.config : {}) }
+      // Ayar sırası: varsayılan → ctx.storage (son oturumun backend beyanı) → ctx.config
+      // → backend `/offpeak-durum` yanıtı (aşağıda `sayilariTazele` içinde).
+      const onceki = depo.get('ayar', null)
+
+      ayar = ayarlariBirlestir(onceki, typeof ctx.config === 'object' ? ctx.config : null)
     } catch {
       ayar = { ...VARSAYILAN_AYAR }
     }

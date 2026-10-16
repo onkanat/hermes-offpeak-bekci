@@ -12,7 +12,11 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
+  AYAR_TIPLERI,
   ID,
+  ORTAK_AYAR_ANAHTARLARI,
+  VARSAYILAN_AYAR,
+  ayarlariBirlestir,
   kalanSaniye,
   kalemAyristir,
   kuyrukAyristir,
@@ -175,6 +179,69 @@ test('koşum kaydı tablosu kalem sayılmaz + kalın/notlu durum okunur', async 
   // onaylama yalnız durum sözcüğünü değiştirir: kalın işaret ve ek not korunur
   assert.equal(durumHucreYaz(' **onay-bekliyor** (kullanıcı, 08:05) '), ' **onaylı** (kullanıcı, 08:05) ')
   assert.equal(durumHucreYaz('  '), '  onaylı  ')
+})
+
+test('ayarlar: tek beyan kaynağı + ortak adlar + eski ad uyumu', () => {
+  // Ortak adlar py `bekci_core.VARSAYILAN_AYARLAR` ile aynı küme (tests/test_ayarlar.py eşler).
+  assert.equal(ORTAK_AYAR_ANAHTARLARI.length, 13)
+  assert.ok(ORTAK_AYAR_ANAHTARLARI.includes('on_bildirim_dk'))
+  assert.ok(ORTAK_AYAR_ANAHTARLARI.includes('kuru_kosu'))
+
+  // Kullanıcıya özel sabit yol gömülü olamaz; kuyruk defteri genel varsayılana işaret eder.
+  const metin = readFileSync(resolve(kok, 'desktop/bekci-cekirdek.js'), 'utf8')
+
+  assert.ok(!metin.includes('MacAir'), 'kişisel yol gömülü')
+  assert.ok(!metin.includes('/Users/'), 'kişisel yol gömülü')
+  assert.equal(VARSAYILAN_AYAR.kuyruk_dosyasi, '~/.hermes/offpeak-bekci/kuyruk.md')
+
+  // Birleştirme: soldan sağa ezer, bilinmeyeni atar, eski adı çevirir, boş değeri yok sayar.
+  const a = ayarlariBirlestir({ t30_dk: '15', bilinmeyen: 1, hedef_hiz_dk: null })
+
+  assert.equal(a.on_bildirim_dk, 15)
+  assert.equal(a.t30_dk, undefined)
+  assert.equal(a.bilinmeyen, undefined)
+  assert.equal(a.hedef_hiz_dk, VARSAYILAN_AYAR.hedef_hiz_dk ?? undefined)
+  assert.equal(ayarlariBirlestir({ on_bildirim_dk: 12 }, { on_bildirim_dk: 5 }).on_bildirim_dk, 5)
+  // kanonik ad, aynı kaynaktaki takma addan üstündür
+  assert.equal(ayarlariBirlestir({ t30_dk: 5, on_bildirim_dk: 12 }).on_bildirim_dk, 12)
+  // backend'in türev alanları (varsayilanlar/schedule_gecerli) ayar sanılmaz
+  const uzak = ayarlariBirlestir({ varsayilanlar: { x: 1 }, schedule_gecerli: true })
+
+  assert.equal(uzak.varsayilanlar, undefined)
+  assert.equal(uzak.schedule_gecerli, undefined)
+  // bozuk kaynak sessizce atlanır
+  assert.equal(ayarlariBirlestir(null, [], 'x', 3).on_bildirim_dk, VARSAYILAN_AYAR.on_bildirim_dk)
+  // tip zorlaması py `ayarlari_birlestir` ile aynı örneklerde aynı sonucu vermeli
+  const tipler = ayarlariBirlestir({ hedef_hiz_dk: '9', kuru_kosu: 'false', pencere_sn: '90' })
+
+  assert.equal(tipler.hedef_hiz_dk, 9)
+  assert.equal(tipler.kuru_kosu, false)
+  assert.equal(tipler.pencere_sn, 90)
+  assert.equal(ayarlariBirlestir({ on_bildirim_dk: 'x' }).on_bildirim_dk, 30) // çevrilemez → varsayılan
+  assert.equal(ayarlariBirlestir({ on_bildirim_dk: '' }).on_bildirim_dk, 30)
+  assert.deepEqual(ayarlariBirlestir({ off_peak_only_isler: 'a, b' }).off_peak_only_isler, ['a', 'b'])
+})
+
+test('ayar tipleri plugin.yaml ile aynı (masaüstü yarısı)', () => {
+  // py tarafındaki aynı eşleme tests/test_ayarlar.py:test_js_ayar_tipleri_plugin_yaml_ile_ayni
+  assert.equal(AYAR_TIPLERI.on_bildirim_dk, 'tam')
+  assert.equal(AYAR_TIPLERI.pencere_sn, 'ondalik')
+  assert.equal(AYAR_TIPLERI.kuru_kosu, 'mantik')
+  assert.equal(AYAR_TIPLERI.off_peak_only_isler, 'liste')
+  assert.equal(AYAR_TIPLERI.olcum_dosyasi, 'metin')
+  assert.deepEqual(Object.keys(AYAR_TIPLERI).sort(), [...ORTAK_AYAR_ANAHTARLARI].sort())
+})
+
+test('ayar eşiği rozete ve T-30 kararına yansır (on_bildirim_dk)', () => {
+  const erken = an(`${PZT}T17:00:00Z`)
+
+  assert.equal(ozet(erken, { on_bildirim_dk: 15 }).t30_icerisinde, false)
+  assert.equal(ozet(erken, { on_bildirim_dk: 90 }).t30_icerisinde, true)
+  assert.equal(ozet(erken, { on_bildirim_dk: 15 }).t30_dk, 15)
+  // eski ad da okunur (geriye uyum)
+  assert.equal(ozet(erken, { t30_dk: 90 }).t30_icerisinde, true)
+  assert.equal(t30Karari(erken, { get: () => false, set: () => {} }, { on_bildirim_dk: 90 }).gerekli, true)
+  assert.equal(t30Karari(erken, { get: () => false, set: () => {} }, { on_bildirim_dk: 15 }).gerekli, false)
 })
 
 test('plugin.js tek dosya: yalnız izinli specifier importları + gömülü çekirdek', () => {

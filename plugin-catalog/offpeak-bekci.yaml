@@ -20,7 +20,8 @@ description: >-
   `kuru_kosu: true` — eklenti ölçer, geciktirmez; canlıya almak için config.yaml'da
   `offpeak-bekci.kuru_kosu: false`. `on_session_end` kancası oturum sonunda pencere/kota/
   kuyruk özetini yerel günlüğe yazar. Disclosure — ağ çağrısı yok, telemetri yok, sır
-  okumaz/yazmaz: yalnız yerel dosyalar okunur (`~/MacAir/off-peak-kuyruk.md` kuyruk dosyası,
+  okumaz/yazmaz: yalnız yerel dosyalar okunur (`kuyruk_dosyasi` ayarının gösterdiği defter,
+  varsayılan `~/.hermes/offpeak-bekci/kuyruk.md`),
   salt-okuma) ve kullanıcı onay verdiğinde yalnız o kuyruk dosyası atomik olarak yazılır
   (`/offpeak-onayla`; dosyanın içeriğini eklenti üretmez, kullanıcının dosyasıdır). Ölçüm/
   uyarı satırları yerel JSONL'e yazılır (varsayılan `~/.hermes/offpeak-bekci/olcum.jsonl`).

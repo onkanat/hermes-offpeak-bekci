@@ -143,8 +143,9 @@ class PolitikaTest(unittest.TestCase):
         self.assertIs(c.ollama_bulut_mu(base_url="http://127.0.0.1:11434"), False)
 
     def test_ayarlari_birlestir_ve_yol(self):
-        a = c.ayarlari_birlestir({"t30_dk": "15", "bilinmeyen": 1})
-        self.assertEqual(a["t30_dk"], 15)
+        a = c.ayarlari_birlestir({"t30_dk": "15", "bilinmeyen": 1})  # t30_dk = eski ad
+        self.assertEqual(a["on_bildirim_dk"], 15)
+        self.assertNotIn("t30_dk", a)
         self.assertNotIn("bilinmeyen", a)
         self.assertEqual(c.ayarlari_birlestir(None), c.VARSAYILAN_AYARLAR)
         self.assertTrue(c.yol_genislet("~/x").startswith(os.path.expanduser("~")))
@@ -270,11 +271,30 @@ class KuyrukTest(unittest.TestCase):
         self.assertEqual((degisen, yeni), ([], metin))
 
 
-GERCEK = Path.home() / "MacAir" / "off-peak-kuyruk.md"
+def _gercek_kuyruk():
+    """Kullanıcının gerçek kuyruk defteri: önce beyan edilen yol, sonra göç öncesi konum.
+
+    Eklentinin okuduğu yol ``kuyruk_dosyasi`` ayarıdır (varsayılan ``~/.hermes/offpeak-bekci/``);
+    ``OFFPEAK_KUYRIK_YOLU`` ile başka bir defter de sınanabilir. Eski konum yalnız bu testte,
+    kullanıcı verisi keşfi olarak denenir — eklenti kodunda/ayarında sabit yol YOKTUR.
+    """
+    adaylar = []
+    ozel = os.environ.get("OFFPEAK_KUYRIK_YOLU")
+    if ozel:
+        adaylar.append(Path(c.yol_genislet(ozel)))
+    adaylar.append(Path(c.yol_genislet(c.VARSAYILAN_AYARLAR["kuyruk_dosyasi"])))
+    adaylar.append(Path.home() / "MacAir" / "off-peak-kuyruk.md")  # göç öncesi konum
+    for aday in adaylar:
+        if aday.exists():
+            return aday
+    return None
+
+
+GERCEK = _gercek_kuyruk()
 
 
 class GercekDosyaTest(unittest.TestCase):
-    @unittest.skipUnless(GERCEK.exists(), "kullanıcının kuyruk dosyası yok")
+    @unittest.skipUnless(GERCEK, "kullanıcının kuyruk dosyası yok")
     def test_gercek_kuyruk_dosyasi(self):
         kalemler = c.kuyruk_ayristir(GERCEK.read_text(encoding="utf-8"))
         kimlikler = [k["id"] for k in kalemler]
@@ -283,7 +303,7 @@ class GercekDosyaTest(unittest.TestCase):
         for k in kalemler:
             self.assertIn(k["durum"], {"bekliyor", "onaylı", "koşuldu", "atlandı", "sahipsiz"})
 
-    @unittest.skipUnless(GERCEK.exists(), "kullanıcının kuyruk dosyası yok")
+    @unittest.skipUnless(GERCEK, "kullanıcının kuyruk dosyası yok")
     def test_gercek_kuyruk_tekil_kimlik(self):
         """Aynı kimlik iki kez görünmemeli (koşum kaydı tablosu kalem sayılmaz) ve
         ``toplam`` gerçek kalem sayısına eşit olmalı."""

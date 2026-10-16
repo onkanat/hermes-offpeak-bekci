@@ -13,9 +13,8 @@ olurdu ve ölçüm hiçbir şeyi kanıtlamazdı. Bu yüzden ``core.utc`` sabit b
 
 Gerçek uyku uyunmaz: ``time.sleep`` taklit edilir, çağrılar ve süreler kaydedilir.
 
-Çalıştırma (hermes_cli'nin bulunduğu yorumlayıcı ile):
-  HERMES_HOME=~/.hermes /Users/hakankilicaslan/.hermes/hermes-agent/venv/bin/python \
-      tools/kuru_kosu_olcum.py
+Çalıştırma (hermes_cli'nin bulunduğu yorumlayıcı ile; venv yolu kişiden kişiye değişir):
+  HERMES_HOME=~/.hermes ~/.hermes/hermes-agent/venv/bin/python tools/kuru_kosu_olcum.py
 """
 
 from __future__ import annotations

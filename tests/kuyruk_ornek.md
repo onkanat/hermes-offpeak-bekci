@@ -1,5 +1,5 @@
 # Kuyruk kalemi örneği (test verisi) — gerçek dosyanın biçimi:
-# `~/MacAir/off-peak-kuyruk.md` → "Kuyruk (aktif)" tablosu.
+# Kuyruk defteri örneği — kullanıcının gerçek defterinden alınmış biçim (yol/sabit değer yok).
 
 | id | iş | sahip | kanıt ölçütü | durum | pencere |
 |----|----|-------|--------------|-------|---------|

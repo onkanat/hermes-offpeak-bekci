@@ -1,14 +1,21 @@
 name: offpeak-bekci
 version: "0.1.0"
+# manifest_version 2 = config_schema (ayar beyanı) alanını taşıyan sürüm.
+manifest_version: 2
 description: >-
   Ollama Cloud off-peak penceresini görünür kılar: başlık çubuğu rozeti pencerenin geri
-  sayımını ve onay bekleyen/onaylı iş kalemlerini gösterir, pencere başlamadan 30 dakika önce
-  bir kez toast uyarır ve onayı `/offpeak-onayla <id,id>` ile kullanıcıdan alır (onaysız iş
-  koşmaz). Gövde tarafında `llm_execution` middleware'i yalnız Ollama Cloud çağrılarında, yalnız
-  peak penceresinde, son 60 sn'deki çağrı sayısı hedef hızı aştıysa kısa bir bekleme uygular
-  (tavanlı) ve saatlik kota tavanı aşıldığında uyarı kaydı yazar; istek iptal edilmez.
-  Varsayılan `kuru_kosu: true` — eklenti ölçer, geciktirmez. Ağ çağrısı yok, telemetri yok,
-  sır okumaz; yalnız yerel kuyruk dosyası (`~/MacAir/off-peak-kuyruk.md`) okunur.
+  sayımını ve onay bekleyen/onaylı iş kalemlerini gösterir, pencere başlamadan
+  `on_bildirim_dk` dakika önce (varsayılan 30) bir kez toast uyarır ve onayı
+  `/offpeak-onayla <id,id>` ile kullanıcıdan alır (onaysız iş koşmaz). Gövde tarafında
+  `llm_execution` middleware'i yalnız Ollama Cloud çağrılarında, yalnız peak penceresinde,
+  son `pencere_sn` saniyedeki çağrı sayısı `hedef_hiz_dk` hedefini aştıysa tavanlı kısa bir
+  bekleme uygular; `kota_penceresi_sn` penceresinde `kota_tavani` aşılırsa uyarı kaydı yazar
+  (istek iptal edilmez). Varsayılan `kuru_kosu: true` — eklenti ölçer, geciktirmez.
+  Ağ çağrısı yok, telemetri yok, sır okumaz; yalnız `kuyruk_dosyasi` ayarının gösterdiği
+  yerel dosya (varsayılan `~/.hermes/offpeak-bekci/kuyruk.md`) okunur. Kullanıcıya özel
+  hiçbir yol/değer eklentiye gömülmez: tüm ayarlar aşağıda `config_schema` ile beyan
+  edilmiştir ve yerindeki (kuruluma özel) değerler `config.yaml` → `offpeak-bekci:` bloğundan,
+  masaüstünde ayrıca `ctx.config` üzerinden gelir.
 author: "Hakan Kılıçaslan (onkanat)"
 license: MIT
 homepage: https://github.com/onkanat/hermes-offpeak-bekci
@@ -25,3 +32,93 @@ provides_hooks:
   - on_session_end
 provides_middleware:
   - llm_execution
+
+# ── Ayarlar (tek beyan kaynağı) ─────────────────────────────────────────────────────────
+#
+# ETKİN DEĞER SIRASI (yüksekten düşüğe):
+#   1. `config.yaml` → `offpeak-bekci:` bloğu  (kuruluma özel, kullanıcı onaylı eşikler)
+#   2. masaüstünde `ctx.config` (plugins.entries.<id>.settings.*) — sunucu bloğunu ezer
+#   3. bu dosyadaki `default` (kurulum bloğu hiç yoksa kullanılan genel değer)
+#
+# `default` değerleri GENELdir: bu makinede onaylanmış eşikler (16.10.2026, Kanban t_358cb364)
+# `config.yaml` bloğunda durur ve kazanır — eklenti onların kopyasını tutmaz. Aşağıdaki
+# "yerinde değer config.yaml'dadır" notlu anahtarlar bu yüzden bilinçli olarak genel
+# varsayılana sahiptir (ör. hedef_hiz_dk 6 ≠ onaylı 15).
+#
+# `bekci_core.VARSAYILAN_AYARLAR` bu dosyadan okunur (tek doğruluk kaynağı); `tests/test_ayarlar.py`
+# iki tarafın ayrışmasını test eder. Bir ayar ekler/değiştirirken İKİ yeri değil, burayı düzeltin.
+config_schema:
+  # Yalnız ölç, geciktirme. Canlıya almak için config.yaml'da `kuru_kosu: false`.
+  kuru_kosu:
+    type: bool
+    default: true
+    description: "true iken eklenti yalnız ölçer ve kaydeder, bekleme uygulamaz (kuru koşu)."
+  # Onay bekleyen kalemlerin okunduğu defter (kullanıcı dosyası — eklenti içeriğini üretmez).
+  kuyruk_dosyasi:
+    type: str
+    default: "~/.hermes/offpeak-bekci/kuyruk.md"
+    description: >-
+      Bekleyen iş kalemlerinin okunduğu yerel defter yolu. `~` ve ortam değişkenleri
+      genişletilir. Kullanıcıya özel yerler (ör. ana çalışma alanı) buraya değil,
+      kurulumun config.yaml bloğuna yazılır.
+  # Off-peak penceresinin açıldığı an (cron, UTC, 5 alan). Eklenti zamanlanmış iş KURMAZ;
+  # bu beyan, pencereyi kullanan işleri kuran kurulum betiklerine/açıklamalara kaynak olur.
+  schedule:
+    type: str
+    default: "5 18 * * 1-5"
+    description: >-
+      Off-peak iş kuyruğunun koşacağı an (cron ifadesi, UTC; 5 alan: dk saat gün ay hafta-günü).
+      Varsayılan 18:05 UTC = 21:05 TR, hafta içi. Eklenti cron oluşturmaz; beyan + doğrulama.
+  # Off-peak'e kaç dakika kala hatırlatma (toast) penceresi başlar.
+  on_bildirim_dk:
+    type: int
+    default: 30
+    description: "Rozet/toast uyarısı pencere açılmadan bu kadar dakika önce başlar."
+  # Kaynak tavanları — yerinde değer config.yaml'dadır. 0 = tavan yok (yalnız raporlar).
+  kota_token_gun:
+    type: int
+    default: 0
+    description: >-
+      Günlük taze token (girdi+çıktı) tavanı; aşılırsa uyarı kaydı. 0 = tavan yok.
+      Yerinde (onaylı) değer config.yaml bloğundadır.
+  cache_read_tavani_gun:
+    type: int
+    default: 0
+    description: >-
+      Günlük cache-read token tavanı; aşılırsa uyarı kaydı. 0 = tavan yok.
+      Yerinde (onaylı) değer config.yaml bloğundadır.
+  hedef_hiz_dk:
+    type: int
+    default: 6
+    description: >-
+      Peak penceresinde dakikada en fazla kaç çağrı (kayan `pencere_sn` saniyelik pencere).
+      Yerinde (onaylı) değer config.yaml bloğundadır.
+  erteleme_tavani_sn:
+    type: float
+    default: 30.0
+    description: >-
+      Tek bir istek için uygulanacak en fazla bekleme (sn) — gecikmenin tavanı.
+      Yerinde (onaylı) değer config.yaml bloğundadır.
+  off_peak_only_isler:
+    type: list
+    default: []
+    description: >-
+      Yalnız off-peak penceresinde koşması gereken iş adları (beyan; onaylı liste
+      config.yaml bloğundadır). Eklenti bu işleri kendisi kurmaz/koşturmaz.
+  # ── İç ayarlar (uygulama sabitleri; genelde değiştirilmez) ────────────────────────────
+  pencere_sn:
+    type: float
+    default: 60.0
+    description: "Hedef hızın ölçüldüğü kayan pencerenin uzunluğu (sn)."
+  kota_penceresi_sn:
+    type: float
+    default: 3600.0
+    description: "Kota sayacının penceresi (sn)."
+  kota_tavani:
+    type: int
+    default: 120
+    description: "Kota penceresinde en fazla çağrı; tavan aşılırsa uyarı kaydı yazılır."
+  olcum_dosyasi:
+    type: str
+    default: "~/.hermes/offpeak-bekci/olcum.jsonl"
+    description: "Ölçüm/uyarı günlüğü (JSONL, yerel; ağ yok). `~` genişletilir."
