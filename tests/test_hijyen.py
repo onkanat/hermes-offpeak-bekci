@@ -9,6 +9,9 @@ Bu test ağacı tarar ve ihlali satır satır söyler. Ağ/sır gerektirmez, det
   - Kodun KENDİ yerel-aralık listesi (`_YEREL_ISARETLERI`: "192.168.", "10.0." gibi ÖNEKLER) — tam IP değil.
   - Testlerdeki GENEL/örnek adresler: 10.0.0.1 · 10.0.0.2 · RFC 5737 (192.0.2.x) — hiçbir makineyi göstermez.
   - Yazar/kimlik bilgisi (LICENSE, plugin.yaml) ve kamuya açık depo adresleri.
+
+Kullanım notu: kapı `git ls-files` ile İZLENEN dosyaları tarar → commit ÖNCESİ koşacaksan önce
+`git add` gerekir (izlenmeyen yeni dosya kapsam dışıdır; ölçüldü 16.10.2026).
 """
 
 from __future__ import annotations
@@ -38,8 +41,10 @@ SIR = re.compile(r"sk-[A-Za-z0-9]{10,}|API_SERVER_KEY|API_KEY\s*=\s*['\"]|BEGIN 
 
 #: Genel/örnek adresler (hiçbir makineyi göstermez) — bilinçli istisna
 IZINLI_ADRES = {"10.0.0.1", "10.0.0.2"}
-#: Kendi hijyen kontrolü ve kimlik testleri: içerikleri bu kalıpları KASITLI olarak anar
-MUAF = {
+#: Bu dosyalarda yalnız AD/ADRES kalıpları muaf (içerikleri bu kalıpları KASITLI olarak anar).
+#: **SIR ve YOL her zaman denetlenir** — yoksa kapı kendi test dosyalarında saklanabilir hâle gelir
+#: (16.10.2026'da ölçüldü: muaf dosyaya eklenen `API_KEY = "..."` satırı kapıyı YEŞİL bırakıyordu).
+MUAF_AD_ADRES = {
     "tests/test_hijyen.py",
     "tests/test_ayarlar.py",
     "tests/test_kurulum.py",
@@ -59,19 +64,19 @@ class HijyenKapisi(unittest.TestCase):
             if not p.is_file():
                 continue
             rel = str(p.relative_to(KOK))
-            if rel in MUAF:
-                continue
+            muaf_ad = rel in MUAF_AD_ADRES          # ad/adres kalıpları muaf, SIR ve YOL değil
             for i, satir in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-                for m in IPV4.finditer(satir):
-                    if _ozel_ip(m) and m.group(0) not in IZINLI_ADRES:
-                        ihlal.append(f"{rel}:{i} tam IP → {m.group(0)}")
-                e_ad = ADLAR.search(satir)
-                if e_ad:
-                    ihlal.append(f"{rel}:{i} makine/ajan adı → {e_ad.group(0)}")
-                e_yol = YOL.search(satir)
-                if e_yol:
-                    ihlal.append(f"{rel}:{i} kişisel yol → {e_yol.group(0)}")
-                e_sir = SIR.search(satir)
+                if not muaf_ad:
+                    for m in IPV4.finditer(satir):
+                        if _ozel_ip(m) and m.group(0) not in IZINLI_ADRES:
+                            ihlal.append(f"{rel}:{i} tam IP → {m.group(0)}")
+                    e_ad = ADLAR.search(satir)
+                    if e_ad:
+                        ihlal.append(f"{rel}:{i} makine/ajan adı → {e_ad.group(0)}")
+                    e_yol = YOL.search(satir)
+                    if e_yol:
+                        ihlal.append(f"{rel}:{i} kişisel yol → {e_yol.group(0)}")
+                e_sir = SIR.search(satir)           # SIR: her dosyada, her zaman
                 if e_sir:
                     ihlal.append(f"{rel}:{i} sır kalıbı → {e_sir.group(0)}")
         self.assertEqual(ihlal, [], "yayın hijyeni ihlali:\n  " + "\n  ".join(ihlal))
