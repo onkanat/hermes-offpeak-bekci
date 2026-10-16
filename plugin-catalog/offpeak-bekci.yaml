@@ -4,9 +4,12 @@
 # UYARI: `repo` adresi henüz herkese açık DEĞİL (2026-10-16 ölçümü: GitHub 404) ve bu
 # checkout'ta `origin` remote'u yok. PR'dan önce repo yayınlanmalı ve `sha` yayınlanan
 # commit'e göre tazelenmeli; aksi hâlde kurulum 404 ile düşer.
+#
+# sha = kod commit'i (kurulum yükü: plugin.yaml, __init__.py, bekci_core.py, bekci_kurulum.py,
+# desktop/, docs/). `/offpeak-kur` + `/offpeak-kaldir` ve cron deposunun salt-okunması bu commit'te: W4b, 2026-10-16.
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
-sha: 178cd2640a77b7478e8882ce8e4ff2b770184117
+sha: f3a2d98ba834f0ac8cc5a426b2102f21fbf25ee7
 title: Off-Peak Bekçi
 description: >-
   Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
