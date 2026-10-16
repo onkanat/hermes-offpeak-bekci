@@ -9,11 +9,16 @@
 #
 # PIN KURALI: pin = YAYIN AĞACINI taşıyan, yayınlanmış son içerik commit'i (bir commit kendi hash'ini
 # taşıyamaz → sabit nokta yok; `sha:` satırını tazeleyen defterleme commit'i onun üstüne biner).
-# Şu an `555dff2…` = main ucu: 0.1.1 yükü + kapı/hijyen düzeltmeleri. Pin tazeleme gerekçesi
-# (0.1.0 → 0.1.1): `/offpeak-durum` varsayılanı OKUNUR rapor oldu, makine biçimi `json` argümanına
-# taşındı; iki yarı (sunucu + masaüstü) BİRLİKTE güncellenmelidir.
+# Şu an pin `a3427af…` = 0.1.2 yükü (kuyruk özeti düzeltmesi + kapı/hijyen düzeltmeleri);
+# yayın ucu `bc23159` = katalog sürüm satırı hizası. Pin tazeleme gerekçesi (0.1.1 → 0.1.2): kuyruk özeti
+# yanıltıcıydı → artık toplam/onaylı/koşuldu yazar; iki yarı (sunucu + masaüstü) BİRLİKTE güncellenmelidir
+# (0.1.1 → 0.1.2'de `desktop/plugin.js` DEĞİŞMEDİ, `bekci_core.py` değişti).
+# BAĞIMLILIK: eklenti hiçbir bağımlılık bildirmez (`requires_env: []` · `python_dependencies: []`) →
+# `--no-deps` GEREKSİZDİR ve **aktif bir eklentiyi değiştirirken reddedilir** ("--no-deps cannot replace
+# an active plugin"); bağımlılık yokken doğru kurulum `hermes plugins install <repo> --ref <pin> --force
+# --enable` (16.10.2026: bir peer makinesinde ölçüldü).
 #
-# TEMİZ KLONDA KABUL (atlanmaz): git clone https://github.com/onkanat/hermes-offpeak-bekci /tmp/x #   && git -C /tmp/x checkout 555dff262a37a35f615dc03f82320db3bf34ccca #   && hermes plugins validate /tmp/x --install-deps   → EXIT=0 (16.10.2026: geçti)
+# TEMİZ KLONDA KABUL (atlanmaz): git clone https://github.com/onkanat/hermes-offpeak-bekci /tmp/x && git -C /tmp/x checkout a3427af7e6344cf7070b45afc69d21c9126a6201 && hermes plugins validate /tmp/x --install-deps   → EXIT=0 (16.10.2026: geçti; bağımlılık olmadığı için --install-deps no-op'tur)
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
 sha: a3427af7e6344cf7070b45afc69d21c9126a6201
