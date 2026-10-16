@@ -46,28 +46,28 @@
       "durum": "bekliyor",
       "efor": "",
       "id": "G-001",
-      "metin": "| G-001 | geçici kalem 1 | webmaster | EXIT=0 | bekliyor | test |",
+      "metin": "| G-001 | geçici kalem 1 | ajan-a | EXIT=0 | bekliyor | test |",
       "satir_no": 12
     },
     {
       "durum": "bekliyor",
       "efor": "",
       "id": "G-002",
-      "metin": "| G-002 | geçici kalem 2 | webmaster | EXIT=0 | bekliyor | test |",
+      "metin": "| G-002 | geçici kalem 2 | ajan-a | EXIT=0 | bekliyor | test |",
       "satir_no": 13
     },
     {
       "durum": "bekliyor",
       "efor": "",
       "id": "G-003",
-      "metin": "| G-003 | geçici kalem 3 | webmaster | EXIT=0 | onay-bekliyor | test |",
+      "metin": "| G-003 | geçici kalem 3 | ajan-a | EXIT=0 | onay-bekliyor | test |",
       "satir_no": 14
     },
     {
       "durum": "onaylı",
       "efor": "",
       "id": "G-004",
-      "metin": "| G-004 | geçici kalem 4 | webmaster | EXIT=0 | onaylı | test |",
+      "metin": "| G-004 | geçici kalem 4 | ajan-a | EXIT=0 | onaylı | test |",
       "satir_no": 15
     }
   ],
