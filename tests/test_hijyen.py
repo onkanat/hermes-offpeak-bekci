@@ -38,6 +38,11 @@ def _ozel_ip(mi: re.Match) -> bool:
 _AD = ["delinux" + "01", "aikon" + "sol", "akilli" + "bidik", "ece" + "pc", "pi2" + "b01",
        "goz" + "cu", "web" + "master"]
 ADLAR = re.compile("|".join(_AD), re.I)
+
+#: BİLİNÇLİ İSTİSNA (16.10.2026, karar kayıtlı): projenin EV MAKİNESİNİN adı (`MacAir`) listeye ALINMAZ.
+#: Gerekçe: yayıncı kimliği zaten `Hermes-MacAir` olarak kamuya açık (commit `author` alanı) → ad yeni bilgi
+#: taşımıyor; buna karşılık başka makinelerin/ajanların adları ve kişisel MUTLAK yollar yasak kalır.
+#: (Kişisel yol örneği bu yüzden genelleştirildi: ev-yolu öneki → `<ev>/…`.)
 #: Kişisel mutlak yol
 YOL = re.compile(r"/Users/[a-zA-Z]|/home/[a-z][a-z0-9_-]*/")
 #: Sır kalıpları — PARÇALARDAN kurulur ki kapı kendi kaynak dosyasını işaretlemesin (aksi hâlde

@@ -10,7 +10,7 @@ zorunluluktur, süs değil: etkin ayar sırası ``config.yaml:offpeak-bekci`` > 
 şema varsayılanı'dır (şartname W4a-1) ve makinenin bloğu ``kuru_kosu: true`` beyan ettiği sürece
 ctx ile verilen ``kuru_kosu: False`` **ezilir** → kontrol koşumu sessizce kuru koşuya döner ve
 "kapı ölü değil" kontrolü kaybolur (ölçüldü 16.10.2026: ``0 != 5``; ham kanıt
-``~/MacAir/offpeak-bekci-K006-olcum-ham-20261016.txt`` H1). Bu yüzden her koşum
+``<ev>/offpeak-bekci-K006-olcum-ham-20261016.txt`` H1). Bu yüzden her koşum
 ``_SahteHermesConfig`` ile canlı bloğu **boş** gösterir; gerçek zincir
 ``tests/test_ayar_zinciri.py``de sınanır. Aynı sızma ``tools/kuru_kosu_olcum.py``nin E5
 kontrol kolunda da vardı → ora da aynı sahteyi kullanır.
@@ -136,7 +136,7 @@ class MiddlewareTest(unittest.TestCase):
         Bu kontrol 16.10.2026'da ``0 != 5`` ile düşüyordu; kök neden KOD değil TEST'in
         hermetik olmamasıydı: canlı ``config.yaml`` bloğu ``kuru_kosu: true`` beyan edince
         (W4a-1 sırası: blok > ctx) ctx'in ``False`` değeri eziliyor ve kapı sessizce kuru
-        koşuya dönüyordu. Ölçüm: ``~/MacAir/offpeak-bekci-K006-olcum-ham-20261016.txt`` (H1).
+        koşuya dönüyordu. Ölçüm: ``<ev>/offpeak-bekci-K006-olcum-ham-20261016.txt`` (H1).
         Çözüm: koşum canlı bloğu boş gösterir (``_SahteHermesConfig``) → ctx kazanır.
         """
         kayitlar = self._kosum(20, "canli", kuru_kosu=False, hedef_hiz_dk=15, erteleme_tavani_sn=600.0)
