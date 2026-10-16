@@ -26,8 +26,16 @@ description: >-
   Kurulum opt-in'dir: `/offpeak-kur` kurulacak cron işini TAM gösterir (iş adı, zamanlama,
   promptun tamamı, monitör, workdir, araç kümeleri, teslim) ve `plan_hash` ister; onay
   hash'e bağlıdır ve yalnız kurulum İSTEĞİ oturuma bırakılır — işi ajanın kendi cron aracı
-  kurar. `/offpeak-kaldir` kurulu işleri listeler, `onayla <job_id>` ile kaldırma isteğini
-  bırakır (id · zamanlama · durum · sonraki koşu). Prova `duraklat` ile yapılır (`paused:true`).
+  kurar. Otomatik bırakma host'a bağlıdır (ölçüm: `hermes_cli/plugins_injection.py:18-32`):
+  klasik CLI oturumunda istek ajanın kuyruğuna girer; Ink TUI / masaüstü-panel host'unda
+  çekirdek kalıcı `session_key` ister ve o anahtar komut handler'ına verilmediği için komut
+  kurulacak parametreleri tek satır JSON olarak basar (işi yine ajanın cron aracı kurar,
+  isteği kullanıcı ajana verir). Anahtarı okumanın tek yolu özel çekirdek modülü
+  `gateway.session_context`ten geçer (kural 9 → kullanılmaz); gateway'e enjeksiyon ayrıca
+  `plugins.entries.offpeak-bekci.allow_gateway_injection: true` ister (varsayılan kapalı).
+  `/offpeak-kaldir` kurulu işleri listeler, `onayla <job_id>`
+  ile kaldırma isteğini bırakır (id · zamanlama · durum · sonraki koşu); host sınırı aynıdır.
+  Prova `duraklat` ile yapılır (`paused:true`).
   Disclosure — ağ çağrısı yok, telemetri yok, sır okumaz/yazmaz, kabuk/süreç çalıştırmaz,
   uzaktan kod indirmez, kendi kendini güncellemez. Eklenti cron deposuna (`jobs.json`)
   HİÇBİR koşulda yazmaz, yalnız salt-okur (yol genel yüzeyden türetilir; dizin açan `load_jobs()`

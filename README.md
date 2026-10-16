@@ -33,14 +33,37 @@ yukarıdaki kaynak kurulumu geçerlidir.
 | `/offpeak-durum` | Pencere, geri sayım, kayan pencere hızı, kota ve kuyruk sayacı — JSON. |
 | `/offpeak-onayla <id,id>` | Kuyruk defterindeki kalemleri `onaylı` yapar (onaylayan **tek** yer kullanıcıdır). |
 | `/offpeak-kur` | Kurulacak off-peak cron işini **tam** gösterir (iş adı, zamanlama, promptun tamamı, monitör, workdir, araç kümeleri, teslim) + `plan_hash`. **Hiçbir şey kurmaz.** |
-| `/offpeak-kur onayla <plan_hash> [duraklat]` | Yalnız `plan_hash` tutuyorsa devam eder; kurulum **isteğini** oturuma bırakır, işi ajanın kendi `cronjob_manage` aracı kurar. |
+| `/offpeak-kur onayla <plan_hash> [duraklat]` | Yalnız `plan_hash` tutuyorsa devam eder; kurulum **isteğini** oturuma bırakır, işi ajanın kendi `cronjob_manage` aracı kurar (host'a bağlı — bkz. *Hangi host'ta otomatik bırakılır?*). |
 | `/offpeak-kaldir` | Bu profildeki offpeak işlerini listeler (id · zamanlama · durum · sonraki koşu). |
-| `/offpeak-kaldir onayla <job_id>` | Yalnız listedeki bir id ile kaldırma **isteğini** oturuma bırakır. |
+| `/offpeak-kaldir onayla <job_id>` | Yalnız listedeki bir id ile kaldırma **isteğini** oturuma bırakır (host'a bağlı — bkz. *Hangi host'ta otomatik bırakılır?*). |
 
 Neden "istek"? Eklenti API'sinde cron işi **yaratma** yüzeyi yoktur (`register_command`/hook/
 middleware vardır, iş kurucu yoktur). Kurulum bu yüzden kullanıcı onaylı bir mesajla oturuma
 bırakılır; kararı ve kaydı ajanın cron aracı yapar. **Eklenti `jobs.json`'a hiçbir koşulda
 yazmaz — yalnız okur.**
+
+### Hangi host'ta otomatik bırakılır? (ölçülmüş sınır)
+
+`ctx.inject_message(…)` çağrısını çekirdek host'a göre yönlendirir
+(`hermes_cli/plugins_injection.py:18-32`):
+
+| Host | Ne olur |
+| --- | --- |
+| **Klasik CLI** (terminal REPL — çekirdek burada CLI referansını kurar) | İstek CLI kuyruğuna girer, dönüş `True`; komut bitince ajan kurar. |
+| **Ink TUI (`hermes --tui`) / masaüstü-panel** | Çekirdek **kalıcı `session_key`** ister. O anahtar komut handler'ına verilmez (`PluginContext` üyelerinde oturum alanı yok; `pre_command` kancası masaüstü `command.dispatch` yolunda atılmıyor) → dönüş `False`. |
+| **Gateway oturumu** (`session_key` ya da `origin` eklentiye önceden verilmişse) | İstek o oturuma kuyruklanır — **ama** çekirdek önce kapıyı sorar: `plugins.entries.offpeak-bekci.allow_gateway_injection: true` (varsayılan **kapalı**). Kapalıysa uyarı basılır ve dönüş `False` (`hermes_cli/plugins.py:622-630`). |
+
+Yani masaüstü/Ink host'unda komut "bu kanalda oturuma bırakılamadı" dalına düşer ve kurulacak
+parametreleri **tek satır JSON** olarak basar: iş yine ajanın cron aracıyla kurulur, tek fark isteği
+kullanıcı ajana verir (JSON'u yapıştır ya da `cronjob_manage` ile kur).
+
+Oturum anahtarını okumanın tek süreç içi yolu `gateway.session_context.get_session_env`; bu modül
+eklenti için **genel yüzey değil**: çekirdeğin kendi denetleyicisi yapay bir
+`from gateway.session_context import get_session_env` importunu bulgu olarak döndürüyor
+(`private_import_findings`), `hermes_constants.get_hermes_home` döndürmüyor. Kural 9 gereği bu yol
+kullanılmaz; yani masaüstünde komut handler'ı anahtara ulaşamaz ve otomatik bırakma çalışmaz
+(çözüm kullanıcı/çekirdek kararı: ya genel bir okuma yüzeyi, ya `allow_gateway_injection` + anahtar).
+Regresyon testleri: `tests/test_kurulum.py::HostKanaliTest` (+ metin tarafı `HostBeyaniTest`).
 
 Prova (işi kurup hemen kaldırmadan denemek):
 

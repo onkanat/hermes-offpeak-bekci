@@ -54,6 +54,13 @@ provides_middleware:
 #   * Kullanıcıya özel hiçbir yol/anahtar plan şablonuna gömülmez: kuyruk yolu `kuyruk_dosyasi`
 #     ayarından, pencere beyanı `schedule` ayarından gelir; monitör betiği adı görelidir
 #     (`offpeak_bekci.py`) ve cron motoru onu profilin `scripts/` dizininde çözer.
+#   * "İsteği oturuma bırakma" HOST'A BAĞLIDIR (ölçüm: `hermes_cli/plugins_injection.py:18-32`):
+#     klasik CLI oturumunda istek ajanın kuyruğuna girer (dönüş True); Ink TUI / masaüstü-panel
+#     host'unda çekirdek kalıcı `session_key` ister ve o anahtar komut handler'ına verilmediği
+#     için dönüş False olur — komut kurulacak parametreleri tek satır JSON olarak basar, işi
+#     kullanıcı ajana vererek kurdurur. (Anahtarı okumanın tek yolu `gateway.session_context`
+#     özel çekirdek modülünden geçer; kural 9 gereği kullanılmaz. Gateway'e enjeksiyon ayrıca
+#     `plugins.entries.offpeak-bekci.allow_gateway_injection: true` ister — varsayılan kapalı.)
 #   * Ağ çağrısı, telemetri, sır okuma yoktur.
 
 # ── Ayarlar (tek beyan kaynağı) ─────────────────────────────────────────────────────────

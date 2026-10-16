@@ -6,6 +6,10 @@ Neyi kanıtlar:
     komut kurmaz.
   * Onaydan sonra eklenti işi **kurmaz**: yalnız isteği oturuma bırakır (``inject_message``) ve
     parametreleri ajanın cron aracına verilecek JSON olarak basar.
+  * **İsteği oturuma bırakma host'a bağlıdır** (``HostKanaliTest``): klasik CLI dalında istek
+    bırakılır; masaüstü/Ink dalında çekirdek ``session_key`` ister, handler ona ulaşamaz →
+    dönüş ``False`` ve parametre JSON'u basılır. Disclosure metinleri bunu yazmak zorundadır
+    (``HostBeyaniTest``).
   * Eklenti cron deposuna (``jobs.json``) **yazmaz**: komut çıktıları ve depo okuması öncesi/
     sonrası dosya içeriği bayt bayt aynıdır.
   * Kaldırma yalnız listedeki bir id ile ve onayla yapılır; yanlış id reddedilir.
@@ -72,6 +76,47 @@ class SahteBaglam:
     def inject_message(self, metin: str, role: str = "user") -> bool:
         self.birakilanlar.append(metin)
         return self.birakildi
+
+
+class CekirdekKanal:
+    """Çekirdeğin ``inject_message`` yönlendirmesini ÖLÇÜLMÜŞ kuralla taklit eden sahte host.
+
+    Kaynak: ``hermes_cli/plugins_injection.py:18-32`` (dal sırası birebir):
+
+      * klasik CLI referansı VAR, ``origin`` YOK → mesaj CLI kuyruğuna girer, ``True``;
+      * oturum anahtarı da ``origin`` de YOK → çekirdek uyarır, ``False``  ← Ink TUI / masaüstü-panel;
+      * oturum anahtarı VAR (gateway/TUI) → o oturuma kuyruklanır, ``True``.
+
+    Masaüstü host'unda komut ``tui_gateway/methods_tools.py:597-609`` ile koşar:
+    ``manager._cli_ref`` orada ``None``dır ve oturum anahtarı komut handler'ına **verilmez**
+    (yalnız ``HERMES_SESSION_*`` ContextVar'ları bağlanır) → ikinci dal işler. Bu sınıf o iki dalı
+    testte ayrılabilir kılar; gerçek host teslimi bu pakette ölçülmez.
+    """
+
+    def __init__(self, host: str, oturum_anahtari: str = "", origin: dict | None = None):
+        self.host = host
+        self.oturum_anahtari = oturum_anahtari
+        self.origin = origin
+        self.birakilanlar: list = []
+        self.uyarilar: list = []
+
+    def get_config(self, anahtar: str, varsayilan=None):
+        return varsayilan
+
+    def inject_message(self, metin: str, role: str = "user", **_: object) -> bool:
+        if self.host == "cli" and self.origin is None:
+            self.birakilanlar.append(metin)
+            return True
+        if self.oturum_anahtari and self.origin is not None:
+            self.uyarilar.append("inject_message: pass session_key or origin, not both")
+            return False
+        if not self.oturum_anahtari and self.origin is None:
+            self.uyarilar.append(
+                "inject_message: gateway mode requires an existing session_key or an origin"
+            )
+            return False
+        self.birakilanlar.append(metin)
+        return True
 
 
 class KurulumOrtami:
@@ -476,6 +521,137 @@ class DepoYoluTest(unittest.TestCase):
                         hedef == "cron" or hedef.startswith("cron."),
                         f"{dosya}: özel çekirdek modülü import edilmiş: {hedef}",
                     )
+
+
+class HostKanaliTest(unittest.TestCase):
+    """İsteği oturuma bırakma hangi host'ta teslim edilir (kanıt: `kanit-host-kanali.md`).
+
+    İddia teste bağlanır: klasik CLI dalında komut isteği **bırakır**; masaüstü/Ink dalında
+    çekirdek çağrısı ``False`` döner ve komut kurulacak parametreleri JSON olarak **basar**.
+    Sahte host (``CekirdekKanal``) çekirdeğin ölçülmüş yönlendirmesini taklit eder; gerçek
+    host teslimi (Hermes.app) bu pakette ölçülmez — sınır README disclosure'ında yazılıdır.
+    """
+
+    ISLER = [{"id": "a1", "name": kur.IS_ADI, "prompt": "x " + kur.ISARET, "enabled": True,
+              "state": "scheduled", "schedule_display": "*/5 * * * *"}]
+
+    def test_kanal_cekirdek_yonlendirmesini_taklit_eder(self):
+        """Sahte host doğru mu: masaüstü+anahtarsız False (uyarı basılır), anahtarlı True."""
+        anahtarsiz = CekirdekKanal(host="masaustu")
+        self.assertFalse(anahtarsiz.inject_message("x"))
+        self.assertEqual(len(anahtarsiz.uyarilar), 1)
+        self.assertIn("session_key", anahtarsiz.uyarilar[0])
+        anahtarli = CekirdekKanal(host="masaustu", oturum_anahtari="ses_abc")
+        self.assertTrue(anahtarli.inject_message("x"))
+        self.assertEqual(anahtarli.birakilanlar, ["x"])
+
+    def test_komut_inject_message_i_anahtarsiz_cagirir(self):
+        """Komut oturum anahtarı/origin GEÇMEZ → masaüstü dalı her zaman False döner."""
+        cagrilar: list = []
+
+        class Casus:
+            def inject_message(self, *args: object, **kw: object) -> bool:
+                cagrilar.append((args, kw))
+                return False
+
+        with KurulumOrtami() as o:
+            o.baglam = Casus()
+            plan = _plan_uret(o)
+            mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(plan)}")
+        self.assertEqual(len(cagrilar), 1)
+        args, kw = cagrilar[0]
+        self.assertEqual(args, (kur.enjeksiyon_metni(plan, kur.cronjob_parametreleri(plan)),))
+        self.assertEqual(kw, {})
+
+    def test_kur_klasik_cli_dalinda_istegi_birakir_jsonu_da_basar(self):
+        with KurulumOrtami() as o:
+            o.baglam = CekirdekKanal(host="cli")
+            plan = _plan_uret(o)
+            onceki = o.depo_baytlari()
+            cikti = mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(plan)}")
+            self.assertIn("ONAY ALINDI", cikti)
+            self.assertIn("oturuma bırakıldı", cikti)
+            self.assertNotIn("bu kanalda oturuma bırakılamadı", cikti)
+            self.assertEqual(len(o.baglam.birakilanlar), 1)
+            self.assertIn(kur.plan_hash(plan), o.baglam.birakilanlar[0])
+            self.assertIn("cronjob_manage", o.baglam.birakilanlar[0])
+            self.assertTrue(o.kayitlar[0]["oturuma_birakildi"])
+            gonderilen = _etiketli_json(cikti, "kurulacak iş (tek satır JSON):")
+            self.assertEqual(gonderilen, kur.cronjob_parametreleri(plan))
+            self.assertEqual(o.depo_baytlari(), onceki)
+
+    def test_kur_masaustu_dalinda_parametreyi_basar_ve_kurmaz(self):
+        with KurulumOrtami() as o:
+            o.baglam = CekirdekKanal(host="masaustu")
+            plan = _plan_uret(o)
+            onceki = o.depo_baytlari()
+            cikti = mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(plan)}")
+            self.assertIn("bu kanalda oturuma bırakılamadı", cikti)
+            self.assertIn("cronjob_manage", cikti)  # geri alma yolu gösterilir
+            self.assertEqual(o.baglam.birakilanlar, [])
+            self.assertTrue(o.baglam.uyarilar)  # çekirdek uyarısı basılır
+            self.assertFalse(o.kayitlar[0]["oturuma_birakildi"])
+            gonderilen = _etiketli_json(cikti, "kurulacak iş (tek satır JSON):")
+            self.assertEqual(gonderilen["name"], plan["is_adi"])
+            self.assertEqual(gonderilen["schedule"], plan["zamanlama"])
+            self.assertEqual(o.depo_baytlari(), onceki)  # eklenti jobs.json'a yazmaz
+
+    def test_kaldir_klasik_cli_dalinda_istegi_birakir(self):
+        with KurulumOrtami(isler=self.ISLER) as o:
+            o.baglam = CekirdekKanal(host="cli")
+            cikti = mod._komut_kaldir(o.baglam)("onayla a1")
+            self.assertIn("KALDIRMA ONAYI — istek oturuma bırakıldı", cikti)
+            self.assertEqual(len(o.baglam.birakilanlar), 1)
+            self.assertIn('"job_id": "a1"', o.baglam.birakilanlar[0])
+            self.assertTrue(o.kayitlar[0]["oturuma_birakildi"])
+
+    def test_kaldir_masaustu_dalinda_parametreyi_basar(self):
+        with KurulumOrtami(isler=self.ISLER) as o:
+            o.baglam = CekirdekKanal(host="masaustu")
+            onceki = o.depo_baytlari()
+            cikti = mod._komut_kaldir(o.baglam)("onayla a1")
+            self.assertIn("bu kanalda oturuma bırakılamadı", cikti)
+            self.assertIn('"action": "remove"', cikti)
+            self.assertEqual(o.baglam.birakilanlar, [])
+            self.assertFalse(o.kayitlar[0]["oturuma_birakildi"])
+            self.assertEqual(o.depo_baytlari(), onceki)  # kaldırmayı komut YAPMAZ
+
+
+class HostBeyaniTest(unittest.TestCase):
+    """Disclosure iddiası teste bağlı: README + manifestler host sınırını YAZMAK zorunda.
+
+    İnceleme (t_12e1f1e0, tur 1) kanıt ile iddianın ayrıştığını buldu; metinlerden host ayrımı
+    sessizce düşerse bu test kırmızı olur.
+    """
+
+    BEYAN_DOSYALARI = ("README.md", "plugin.yaml", "plugin-catalog/offpeak-bekci.yaml")
+
+    def test_beyanlar_host_ayrimini_yazar(self):
+        for ad in self.BEYAN_DOSYALARI:
+            metin = (KOK / ad).read_text(encoding="utf-8")
+            kucuk = metin.lower()
+            with self.subTest(dosya=ad):
+                self.assertIn("session_key", metin, f"{ad}: host sınırı (session_key) yazılmamış")
+                self.assertIn("ink", kucuk, f"{ad}: Ink TUI host'u yazılmamış")
+                self.assertIn("masaüstü", kucuk, f"{ad}: masaüstü host'u yazılmamış")
+
+    def test_beyanlar_gateway_kapisini_da_yazar(self):
+        """Gateway'e enjeksiyonun opt-in kapısı (`allow_gateway_injection`, varsayılan kapalı)
+        ve anahtarın yalnız özel çekirdek modülünden okunabildiği üç beyanda da yazılı olmalı —
+        yoksa 'gateway oturumunda kuyruklanır' iddiası eksik kalır (tur 2 düzeltmesi)."""
+        for ad in self.BEYAN_DOSYALARI:
+            metin = (KOK / ad).read_text(encoding="utf-8")
+            with self.subTest(dosya=ad):
+                self.assertIn("allow_gateway_injection", metin,
+                              f"{ad}: gateway enjeksiyon kapısı yazılmamış")
+                self.assertIn("gateway.session_context", metin,
+                              f"{ad}: anahtarın özel modülden geçtiği yazılmamış")
+
+    def test_readme_host_bolumunu_ve_json_fallbackini_anlatir(self):
+        metin = (KOK / "README.md").read_text(encoding="utf-8")
+        self.assertIn("Hangi host'ta otomatik bırakılır?", metin)
+        self.assertIn("bu kanalda oturuma bırakılamadı", metin)
+        self.assertIn("HostKanaliTest", metin)
 
 
 if __name__ == "__main__":
