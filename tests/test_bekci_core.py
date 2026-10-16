@@ -4,6 +4,7 @@
 """
 import json
 import os
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -295,11 +296,13 @@ def _gercek_kuyruk():
     """Kullanıcının gerçek kuyruk defteri: önce beyan edilen yol, sonra göç öncesi konum.
 
     Eklentinin okuduğu yol ``kuyruk_dosyasi`` ayarıdır (varsayılan ``~/.hermes/offpeak-bekci/``);
-    ``OFFPEAK_KUYRIK_YOLU`` ile başka bir defter de sınanabilir. Eski konum yalnız bu testte,
-    kullanıcı verisi keşfi olarak denenir — eklenti kodunda/ayarında sabit yol YOKTUR.
+    ``OFFPEAK_KUYRUK_YOLU`` ile başka bir defter de sınanabilir (eski yazım ``OFFPEAK_KUYRIK_YOLU`` de kabul
+    edilir). Eski konum yalnız bu testte, kullanıcı verisi keşfi olarak denenir — eklenti kodunda/ayarında
+    sabit yol YOKTUR.
     """
     adaylar = []
-    ozel = os.environ.get("OFFPEAK_KUYRIK_YOLU")
+    # Hem doğru ad hem eski (yanlış yazılmış) ad kabul edilir: 'KUYRIK' 16.10.2026'dan önceki test/notlarda geçiyor.
+    ozel = os.environ.get("OFFPEAK_KUYRUK_YOLU") or os.environ.get("OFFPEAK_KUYRIK_YOLU")
     if ozel:
         adaylar.append(Path(c.yol_genislet(ozel)))
     adaylar.append(Path(c.yol_genislet(c.VARSAYILAN_AYARLAR["kuyruk_dosyasi"])))
@@ -319,7 +322,14 @@ class GercekDosyaTest(unittest.TestCase):
         kalemler = c.kuyruk_ayristir(GERCEK.read_text(encoding="utf-8"))
         kimlikler = [k["id"] for k in kalemler]
         self.assertTrue(kimlikler)
-        self.assertIn("K-001", kimlikler)
+        # ÖNEK MAKİNEYE BAĞLIDIR: her makine kendi önekini kullanır (K-* · A-* · G-* …).
+        # Sabit bir önek aramak testi başka makinede DÜŞÜRÜR (16.10.2026'da ölçüldü: bir peer makinesinde
+        # "K-001" yok → 107 test · FAILED · EXIT=1; temiz klonda ise dosya olmadığı için SKIP).
+        # Kural: kimlikler TEK bir önek ailesinden olmalı ve numara taşımalı.
+        onekler = {m.group(1) for m in (re.match(r"^([A-Za-z]+)-(\d+)$", k) for k in kimlikler) if m}
+        self.assertEqual(len(onekler), 1, f"tek önek ailesi beklenir · bulunan: {sorted(onekler)} · {kimlikler[:5]}")
+        self.assertEqual(len(onekler) and len([k for k in kimlikler if re.match(r"^[A-Za-z]+-\d+$", k)]),
+                         len(kimlikler), "her kimlik <önek>-<sayı> biçiminde olmalı")
         for k in kalemler:
             self.assertIn(k["durum"], {"bekliyor", "onaylı", "koşuldu", "atlandı", "sahipsiz"})
 
@@ -331,6 +341,37 @@ class GercekDosyaTest(unittest.TestCase):
         kimlikler = [k["id"] for k in kalemler]
         self.assertEqual(len(kimlikler), len(set(kimlikler)), "yinelenen kimlik: %r" % kimlikler)
         self.assertEqual(c.kuyruk_sayilari(kalemler)["toplam"], len(kalemler))
+
+
+class SentetikDefterTest(unittest.TestCase):
+    """MAKİNEDEN BAĞIMSIZ defter testleri: içerik burada üretilir, gerçek deftere bakmaz.
+
+    16.10.2026'da ölçüldü: yalnız gerçek deftere bakan testler (a) başka makinede DÜŞÜYORDU
+    (peer makinesi A-* öneki kullanıyor, "K-001" yok) ve (b) temiz klonda defter olmadığı için tamamen SKIP
+    oluyordu → çekirdeğin kimlik/durum davranışı hiç sınanmıyordu. Bu sınıf her ortamda koşar.
+    """
+
+    BASLIK = "| id | iş | sahip | kanıt ölçütü | durum | pencere |\n|---|---|---|---|---|---|\n"
+    SATIRLAR = [
+        "| A-001 | iş bir | makine-b | kanıt | **onaylı** | off-peak |",
+        "| A-002 | iş iki | makine-b | kanıt | **onay-bekliyor** (kullanıcı) | off-peak |",
+        "| A-003 | iş üç | makine-b | kanıt | **koşuldu** 16.10 21:06 — çıktı var | off-peak |",
+    ]
+
+    def test_onek_ailesi_ve_durumlar(self):
+        kalemler = c.kuyruk_ayristir(self.BASLIK + "\n".join(self.SATIRLAR) + "\n")
+        self.assertEqual([k["id"] for k in kalemler], ["A-001", "A-002", "A-003"])
+        self.assertEqual([k["durum"] for k in kalemler], ["onaylı", "bekliyor", "koşuldu"])
+        self.assertEqual(c.kuyruk_sayilari(kalemler)["toplam"], 3)
+
+    def test_onek_makineye_bagimli_degil(self):
+        """K-* / A-* / G-* / T-* öneklerinin hepsi aynı biçimde okunur — test bir makineye bağlanmaz."""
+        for onek in ("K", "A", "G", "T"):
+            with self.subTest(onek=onek):
+                metin = self.BASLIK + "\n".join(s.replace("A-00", onek + "-00") for s in self.SATIRLAR) + "\n"
+                kalemler = c.kuyruk_ayristir(metin)
+                self.assertEqual([k["id"] for k in kalemler],
+                                 [f"{onek}-001", f"{onek}-002", f"{onek}-003"])
 
 
 if __name__ == "__main__":
