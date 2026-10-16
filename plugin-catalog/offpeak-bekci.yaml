@@ -5,8 +5,15 @@
 # checkout'ta `origin` remote'u yok. PR'dan önce repo yayınlanmalı ve `sha` yayınlanan
 # commit'e göre tazelenmeli; aksi hâlde kurulum 404 ile düşer.
 #
-# sha = kod commit'i (kurulum yükü: plugin.yaml, __init__.py, bekci_core.py, bekci_kurulum.py,
-# desktop/, docs/). `/offpeak-kur` + `/offpeak-kaldir` ve cron deposunun salt-okunması bu commit'te: W4b, 2026-10-16.
+# sha = son içerik commit'i (kurulum yükü: plugin.yaml, __init__.py, bekci_core.py, bekci_kurulum.py,
+# desktop/, docs/, LICENSE, CHANGELOG.md). `/offpeak-kur` + `/offpeak-kaldir` ve cron deposunun salt-okunması
+# bu hatta geldi: W4b; LICENSE/CHANGELOG W5 hijyeni (16.10.2026).
+#
+# PIN ↔ HEAD KURALI (ölçülmüş sınır, W5): bir commit kendi hash'ini taşıyamaz (sabit nokta —
+# pin satırı o commit'in içeriğinin parçası olduğu için hash değişir). Bu yüzden pin = YAYIN
+# AĞACINI taşıyan son içerik commit'i olur; `sha:` satırını tazeleyen defterleme commit'i onun
+# üstüne bir adım olarak binmek zorundadır. Kabul ölçütü: `git diff <pin> <HEAD>` çıktısı YALNIZ
+# `sha:` satırını göstermeli (başka fark yok).
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
 sha: 5c877db60d6467464e1107e62f7f24d8ea2aedea
