@@ -11,6 +11,7 @@ description: >-
   son `pencere_sn` saniyedeki çağrı sayısı `hedef_hiz_dk` hedefini aştıysa tavanlı kısa bir
   bekleme uygular; `kota_penceresi_sn` penceresinde `kota_tavani` aşılırsa uyarı kaydı yazar
   (istek iptal edilmez). Varsayılan `kuru_kosu: true` — eklenti ölçer, geciktirmez.
+  `off_peak_only_isler` bir beyandır; eklenti kendi kendine hiçbir zamanlanmış iş kurmaz.
   Ağ çağrısı yok, telemetri yok, sır okumaz; yalnız `kuyruk_dosyasi` ayarının gösterdiği
   yerel dosya (varsayılan `~/.hermes/offpeak-bekci/kuyruk.md`) okunur. Kullanıcıya özel
   hiçbir yol/değer eklentiye gömülmez: tüm ayarlar aşağıda `config_schema` ile beyan
@@ -32,6 +33,28 @@ provides_hooks:
   - on_session_end
 provides_middleware:
   - llm_execution
+
+# ── Komutlar ────────────────────────────────────────────────────────────────────────────
+# `/offpeak-durum`   → pencere/geri sayım/kota/kuyruk durumu (JSON; masaüstü rozeti okur)
+# `/offpeak-onayla`  → kuyruk kalemlerini onaylı yapar (onaysız iş koşmaz)
+# `/offpeak-kur`     → opt-in off-peak cron işinin PLANINI basar: iş adı, zamanlama, prompt,
+#                      monitör, workdir, enabled_toolsets, teslim + plan_hash. Hiçbir şey
+#                      kurmaz; `onayla <plan_hash> [duraklat]` ile yalnız kurulum İSTEĞİNİ
+#                      oturuma bırakır ve işi ajanın kendi cron aracı (`cronjob_manage`) kurar.
+# `/offpeak-kaldir`  → kurulu offpeak işlerini listeler (id/ad/zamanlama/durum/sonraki koşu);
+#                      `onayla <job_id>` ile yalnız kaldırma İSTEĞİNİ oturuma bırakır.
+#
+# AÇIKLAMA (disclosure):
+#   * Eklenti cron deposuna (`<profil>/cron/jobs.json`) HİÇBİR koşulda YAZMAZ — yalnız okur
+#     (`bekci_kurulum.py` + `_kurulum_isleri_oku`). Depo yolu **genel yüzeyden** türetilir
+#     (`hermes_constants.get_hermes_home()` → `<profil evi>/cron/jobs.json`); çekirdeğin özel
+#     modülü (`cron.jobs`) import EDİLMEZ (katalog kural 9); o çağrı (`load_jobs`) dizin açan
+#     `ensure_dirs()` yaptığı için zaten kullanılmaz. Kurulum/kaldırma kullanıcı onayı olmadan
+#     başlamaz; onay planın kendi `plan_hash`ine bağlıdır.
+#   * Kullanıcıya özel hiçbir yol/anahtar plan şablonuna gömülmez: kuyruk yolu `kuyruk_dosyasi`
+#     ayarından, pencere beyanı `schedule` ayarından gelir; monitör betiği adı görelidir
+#     (`offpeak_bekci.py`) ve cron motoru onu profilin `scripts/` dizininde çözer.
+#   * Ağ çağrısı, telemetri, sır okuma yoktur.
 
 # ── Ayarlar (tek beyan kaynağı) ─────────────────────────────────────────────────────────
 #
@@ -62,14 +85,16 @@ config_schema:
       Bekleyen iş kalemlerinin okunduğu yerel defter yolu. `~` ve ortam değişkenleri
       genişletilir. Kullanıcıya özel yerler (ör. ana çalışma alanı) buraya değil,
       kurulumun config.yaml bloğuna yazılır.
-  # Off-peak penceresinin açıldığı an (cron, UTC, 5 alan). Eklenti zamanlanmış iş KURMAZ;
-  # bu beyan, pencereyi kullanan işleri kuran kurulum betiklerine/açıklamalara kaynak olur.
+  # Off-peak penceresinin açıldığı an (cron, UTC, 5 alan). Eklenti bu işi kendisi KURMAZ:
+  # `/offpeak-kur` yalnız plan basar; onaydan sonra işi ajanın cron aracı kurar. Monitörsüz
+  # varyantta iş bu beyana, monitörlü varyantta 5 dakikalık poll + monitör kapısına dayanır.
   schedule:
     type: str
     default: "5 18 * * 1-5"
     description: >-
       Off-peak iş kuyruğunun koşacağı an (cron ifadesi, UTC; 5 alan: dk saat gün ay hafta-günü).
-      Varsayılan 18:05 UTC = 21:05 TR, hafta içi. Eklenti cron oluşturmaz; beyan + doğrulama.
+      Varsayılan 18:05 UTC = 21:05 TR, hafta içi. Eklenti cron deposuna yazmaz; bu beyan
+      `/offpeak-kur` planında kullanılır ve doğrulanır.
   # Off-peak'e kaç dakika kala hatırlatma (toast) penceresi başlar.
   on_bildirim_dk:
     type: int

@@ -19,15 +19,21 @@ description: >-
   aşıldığında (varsayılan 120/saat) uyarı kaydı yazar, isteği iptal etmez. Varsayılan
   `kuru_kosu: true` — eklenti ölçer, geciktirmez; canlıya almak için config.yaml'da
   `offpeak-bekci.kuru_kosu: false`. `on_session_end` kancası oturum sonunda pencere/kota/
-  kuyruk özetini yerel günlüğe yazar. Disclosure — ağ çağrısı yok, telemetri yok, sır
-  okumaz/yazmaz: yalnız yerel dosyalar okunur (`kuyruk_dosyasi` ayarının gösterdiği defter,
-  varsayılan `~/.hermes/offpeak-bekci/kuyruk.md`),
-  salt-okuma) ve kullanıcı onay verdiğinde yalnız o kuyruk dosyası atomik olarak yazılır
-  (`/offpeak-onayla`; dosyanın içeriğini eklenti üretmez, kullanıcının dosyasıdır). Ölçüm/
-  uyarı satırları yerel JSONL'e yazılır (varsayılan `~/.hermes/offpeak-bekci/olcum.jsonl`).
-  Kabuk/süreç çalıştırmaz, uzaktan kod indirmez, kendi kendini güncellemez; masaüstü tarafı
-  `desktop/plugin.js` yalnız eklenti SDK yüzeyini kullanır (prototip yamalama, eval, DOM
-  sorgulama yok).
+  kuyruk özetini yerel günlüğe yazar.
+  Kurulum opt-in'dir: `/offpeak-kur` kurulacak cron işini TAM gösterir (iş adı, zamanlama,
+  promptun tamamı, monitör, workdir, araç kümeleri, teslim) ve `plan_hash` ister; onay
+  hash'e bağlıdır ve yalnız kurulum İSTEĞİ oturuma bırakılır — işi ajanın kendi cron aracı
+  kurar. `/offpeak-kaldir` kurulu işleri listeler, `onayla <job_id>` ile kaldırma isteğini
+  bırakır (id · zamanlama · durum · sonraki koşu). Prova `duraklat` ile yapılır (`paused:true`).
+  Disclosure — ağ çağrısı yok, telemetri yok, sır okumaz/yazmaz, kabuk/süreç çalıştırmaz,
+  uzaktan kod indirmez, kendi kendini güncellemez. Eklenti cron deposuna (`jobs.json`)
+  HİÇBİR koşulda yazmaz, yalnız salt-okur (yol genel yüzeyden türetilir; dizin açan `load_jobs()`
+  kullanılmaz). Okuduğu yerel dosyalar: `kuyruk_dosyasi` ayarının gösterdiği defter
+  (varsayılan `~/.hermes/offpeak-bekci/kuyruk.md`) ve cron deposu. Yazdığı yerler:
+  `olcum_dosyasi` (JSONL ölçüm/uyarı, varsayılan `~/.hermes/offpeak-bekci/olcum.jsonl`) ve
+  kullanıcı `/offpeak-onayla` verdiğinde yalnız o kuyruk dosyası atomik olarak (dosyanın
+  içeriğini eklenti üretmez, kullanıcının dosyasıdır). Masaüstü tarafı `desktop/plugin.js`
+  yalnız eklenti SDK yüzeyini kullanır (prototip yamalama, eval, DOM sorgulama yok).
 maintainer: onkanat
 tier: community
 category: desktop
@@ -41,4 +47,6 @@ capabilities:
     - on_session_end
   provides_middleware:
     - llm_execution
+  # Kayıtlı komutlar manifestte beyan edilmez (şemada alan yok); bilgi amaçlı:
+  # /offpeak-durum · /offpeak-onayla · /offpeak-kur · /offpeak-kaldir
   requires_env: []

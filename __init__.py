@@ -3,7 +3,8 @@
 Kayıtlar (``plugin.yaml`` beyanıyla birebir aynı olacak şekilde):
   * middleware ``llm_execution`` → :func:`_gecikme_kapisi` (istek ``next_call`` sarması)
   * hook ``on_session_end``      → :func:`_oturum_sonu`
-  * komutlar ``/offpeak-durum``, ``/offpeak-onayla`` (manifest'te komut beyan alanı yoktur)
+  * komutlar ``/offpeak-durum``, ``/offpeak-onayla``, ``/offpeak-kur``, ``/offpeak-kaldir``
+    (manifest'te komut beyan alanı yoktur)
 
 Davranış özeti:
   * Gecikme **yalnız** Ollama Cloud çağrısında, **yalnız** peak penceresinde ve son 60 sn'deki
@@ -11,6 +12,10 @@ Davranış özeti:
   * Varsayılan ``kuru_kosu: true`` → ölçer, geciktirmez (uygulanacak süre 0).
   * Kota tavanına ilk değen çağrı yerel günlüğe uyarı yazar; istek **iptal edilmez** (ilk sürümde
     blok yok).
+  * ``/offpeak-kur`` **opt-in** bir cron işinin planını basar; **kuran eklenti değildir**:
+    onaydan (plan hash'i) sonra istek oturuma bırakılır ve işi ajanın kendi cron aracı
+    (``cronjob_manage``) kurar. ``/offpeak-kaldir`` aynı kapıyla kaldırır. Eklenti cron
+    deposuna (``jobs.json``) hiçbir koşulda **yazmaz** — yalnız okur.
   * Ağ çağrısı yok, telemetri yok, sır okunmaz; yalnız yerel kuyruk dosyası okunur ve kullanıcı
     onay verdiğinde (``/offpeak-onayla``) yazılır.
   * Ölçüm/günlük yazımı ve gecikme hesabı asla çağrıyı bozmaz: tüm hata yutulur, ``next_call``
@@ -28,6 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import bekci_core as core
+from . import bekci_kurulum as kurulum
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +259,192 @@ def _komut_onayla(ctx: Any = None) -> Callable[..., str]:
     return offpeak_onayla
 
 
+# ── Kurulum komutları (opt-in cron işi; eklenti cron deposuna YAZMAZ) ──
+def _profil_evi() -> Path:
+    """Etkin profilin ev dizini — monitör betiği ve cron deposu buna göre çözülür."""
+    try:
+        from hermes_constants import get_hermes_home
+
+        return Path(get_hermes_home())
+    except Exception as exc:
+        logger.debug("offpeak-bekci: profil evi Hermes'ten alınamadı (%s)", exc)
+    ham = (os.environ.get("HERMES_HOME") or "").strip()
+    return Path(os.path.expanduser(ham)) if ham else Path(os.path.expanduser("~/.hermes"))
+
+
+def _cron_dosyasi() -> Path:
+    """Profil cron deposu (``<profil evi>/cron/jobs.json``) — türetilir, çekirdeğe bağlanılmaz.
+
+    Yol **genel yüzeyden** (``hermes_constants.get_hermes_home()``) türetilir; çekirdeğin
+    özel modülü (``cron.jobs``) import EDİLMEZ (katalog kural 9: yalnız genel yüzeyler —
+    private import doğrulamada uyarı üretir ve sürümde kırılabilir). Türetme çekirdeğin
+    kendi hesabıyla birebir aynıdır: ``cron/jobs.py`` → ``JOBS_FILE = get_hermes_home()/"cron"/"jobs.json"``.
+    """
+    return _profil_evi() / "cron" / "jobs.json"
+
+
+def _kurulum_isleri_oku() -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """Kurulu cron işlerini **salt okur**.
+
+    ``cron.jobs.load_jobs()`` bilerek kullanılmaz: o çağrı ``ensure_dirs()`` ile dizin açar
+    (yan etki). Eklenti yalnız deposu okur; (işler, hata) döner — dosya yoksa hata None'dur
+    ("kurulu iş yok" demektir).
+    """
+    yol = _cron_dosyasi()
+    try:
+        veri = json.loads(yol.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return [], None
+    except Exception as exc:
+        return [], f"cron deposu okunamadı: {yol} ({exc})"
+    isler = veri.get("jobs") if isinstance(veri, dict) else veri
+    if not isinstance(isler, list):
+        return [], f"cron deposu beklenmeyen biçimde: {yol}"
+    return [i for i in isler if isinstance(i, dict)], None
+
+
+def _kur_verisi(ctx: Any = None) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """(plan, ayar) — plan kurulacak işi tam tanımlar; hiçbir şey kurulmaz/yazılmaz."""
+    ayar = _ayarlar(ctx)
+    kuyruk = _kuyruk_yolu(ayar)
+    monitor = _profil_evi() / "scripts" / kurulum.VARSAYILAN_MONITOR
+    plan = kurulum.kurulum_plani(
+        ayar,
+        kuyruk_yolu=str(kuyruk),
+        monitor_yolu=str(monitor),
+        monitor_var=monitor.is_file(),
+        kuyruk_var=kuyruk.is_file(),
+        workdir=str(kuyruk.parent),
+        workdir_var=kuyruk.parent.is_dir(),
+    )
+    return plan, ayar
+
+
+def _oturuma_birak(ctx: Any, metin: str) -> bool:
+    """Onay mesajını oturuma bırakır (varsa). Tüm hata yutulur; False = bırakılamadı."""
+    try:
+        if ctx is not None and hasattr(ctx, "inject_message"):
+            return bool(ctx.inject_message(metin))
+    except Exception as exc:
+        logger.debug("offpeak-bekci: oturuma bırakılamadı (%s)", exc)
+    return False
+
+
+def _komut_kur(ctx: Any = None) -> Callable[..., str]:
+    """``/offpeak-kur [onayla <plan_hash> [duraklat]]`` — opt-in cron işinin planı/kurulumu.
+
+    Argümansız: planı basar (hiçbir şey kurmaz). ``onayla <hash>``: hash **planın kendi
+    hash'i** olmalı; tutarsa kurulum isteği oturuma bırakılır (işi ajanın cron aracı kurar).
+    ``duraklat``: prova için duraklatılmış kurulum.
+    """
+
+    def offpeak_kur(raw_args: str = "") -> str:
+        plan, ayar = _kur_verisi(ctx)
+        parcalar = str(raw_args or "").split()
+        if not parcalar or parcalar[0] in {"plan", "goster", "göster"}:
+            return kurulum.kurulum_bildirimi(plan)
+        if parcalar[0] != "onayla":
+            return (
+                f"bilinmeyen argüman: {parcalar[0]}\n"
+                f"kullanım: {kurulum.ONAY_ORNEK}\nplanı göster: /offpeak-kur"
+            )
+        ozet = kurulum.plan_hash(plan)
+        if len(parcalar) < 2:
+            return (
+                f"kullanım: {kurulum.ONAY_ORNEK}\n"
+                f"plan_hash: {ozet}\n"
+                "onay planın kendi hash'ini ister (yanlışlıkla kurulumu önler)."
+            )
+        verilen = parcalar[1].strip().lower()
+        if verilen != ozet:
+            return (
+                "ONAY REDDEDİLDİ — plan hash'i tutmuyor, hiçbir şey kurulmadı.\n"
+                f"  verilen    : {verilen}\n  plan_hash  : {ozet}\n"
+                "plan bu arada değişmiş olabilir (ayar/kuyruk yolu): `/offpeak-kur` ile yeniden bak."
+            )
+        duraklat = any(p in {"duraklat", "duraklatılmış", "duraklatilmis", "paused"} for p in parcalar[2:])
+        parametreler = kurulum.cronjob_parametreleri(plan, paused=duraklat)
+        metin = kurulum.enjeksiyon_metni(plan, parametreler, paused=duraklat)
+        birakildi = _oturuma_birak(ctx, metin)
+        _kaydet({
+            "tur": "kur_onay",
+            "plan_hash": ozet,
+            "varyant": plan["varyant"],
+            "zamanlama": plan["zamanlama"],
+            "kuyruk": plan["kuyruk"],
+            "duraklat": duraklat,
+            "oturuma_birakildi": birakildi,
+            "kurulum_eklenti_degil": "işi ajanın cron aracı kurar",
+        }, ayar)
+        baslik = (
+            f"ONAY ALINDI (plan {ozet}{' · duraklatılmış' if duraklat else ''}) — kurulum isteği "
+            "oturuma bırakıldı; işi ajanın cron aracı kurar (eklenti jobs.json'a yazmaz)."
+            if birakildi else
+            f"ONAY ALINDI (plan {ozet}) — bu kanalda oturuma bırakılamadı; aşağıdaki parametreyi "
+            "ajana ver ya da `cronjob_manage` ile kendin kur."
+        )
+        return "\n".join([
+            baslik,
+            "kurulacak iş (tek satır JSON): " + kurulum.parametre_json(parametreler),
+            kurulum.GERI_ALMA,
+        ])
+
+    return offpeak_kur
+
+
+def _komut_kaldir(ctx: Any = None) -> Callable[..., str]:
+    """``/offpeak-kaldir [liste | onayla <job_id>]`` — kurulu offpeak işlerini listeler/kaldırır.
+
+    Argümansız: kurulu işleri (id, ad, zamanlama, durum, sonraki koşu) basar. ``onayla <id>``:
+    yalnız listedeki bir id kabul edilir (yanlış işi silmemek için); kaldırma isteği oturuma
+    bırakılır, işi ajanın cron aracı kaldırır.
+    """
+
+    def offpeak_kaldir(raw_args: str = "") -> str:
+        isler, hata = _kurulum_isleri_oku()
+        if hata:
+            return f"{hata}\nhiçbir şey kaldırılmadı (eklenti cron deposuna yazmaz)."
+        bulunan = kurulum.kurulu_isleri_bul(isler)
+        parcalar = str(raw_args or "").split()
+        if not parcalar or parcalar[0] in {"liste", "listele", "durum"}:
+            return kurulum.kurulu_listesi(bulunan)
+        if parcalar[0] != "onayla":
+            return (
+                f"bilinmeyen argüman: {parcalar[0]}\n"
+                "kullanım: /offpeak-kaldir onayla <job_id> · liste için: /offpeak-kaldir\n\n"
+                + kurulum.kurulu_listesi(bulunan)
+            )
+        if len(parcalar) < 2:
+            return (
+                "kullanım: /offpeak-kaldir onayla <job_id>\n\n" + kurulum.kurulu_listesi(bulunan)
+            )
+        hedef = parcalar[1].strip()
+        eslesen = [i for i in bulunan if i["id"] == hedef]
+        if not eslesen:
+            return (
+                f"bu id bu profilde bir offpeak işi değil: {hedef} — hiçbir şey kaldırılmadı.\n"
+                "kaldırma yalnız aşağıdaki listedeki id'lerle yapılır.\n\n"
+                + kurulum.kurulu_listesi(bulunan)
+            )
+        is_ = eslesen[0]
+        metin = kurulum.kaldirma_enjeksiyon_metni(is_)
+        birakildi = _oturuma_birak(ctx, metin)
+        _kaydet({
+            "tur": "kaldir_onay",
+            "job_id": is_["id"],
+            "ad": is_["name"],
+            "oturuma_birakildi": birakildi,
+        }, _ayarlar(ctx))
+        baslik = (
+            "KALDIRMA ONAYI — istek oturuma bırakıldı; işi ajanın cron aracı kaldırır."
+            if birakildi else
+            "KALDIRMA ONAYI — bu kanalda oturuma bırakılamadı; aşağıdaki parametreyi ajana ver."
+        )
+        return "\n".join([baslik, kurulum.kaldirma_bildirimi(is_)])
+
+    return offpeak_kaldir
+
+
 # ── Hook: on_session_end ──────────────────────────────────────────────
 def _oturum_sonu(
     session_id: str = "", completed: bool = True, interrupted: bool = False, **_: Any
@@ -290,5 +482,23 @@ def register(ctx: Any) -> None:
         handler=_komut_onayla(ctx),
         description="Off-peak kuyruğundaki iş kalemlerini onaylı yapar (kullanıcı onayı).",
         args_hint="<id,id>",
+    )
+    ctx.register_command(
+        "offpeak-kur",
+        handler=_komut_kur(ctx),
+        description=(
+            "Opt-in off-peak cron işinin planını gösterir; `onayla <plan_hash> [duraklat]` ile "
+            "kurulum isteğini oturuma bırakır (işi ajanın cron aracı kurar)."
+        ),
+        args_hint="[onayla <plan_hash> [duraklat]]",
+    )
+    ctx.register_command(
+        "offpeak-kaldir",
+        handler=_komut_kaldir(ctx),
+        description=(
+            "Kurulu offpeak cron işlerini listeler; `onayla <job_id>` ile kaldırma isteğini "
+            "oturuma bırakır (işi ajanın cron aracı kaldırır)."
+        ),
+        args_hint="[onayla <job_id>]",
     )
     ctx.register_hook("on_session_end", _oturum_sonu)
