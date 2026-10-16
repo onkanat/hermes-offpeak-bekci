@@ -661,14 +661,21 @@ def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
         d = str(k.get("durum"))
         sayim[d] = sayim.get(d, 0) + 1
     onayli = sayim[ONAYLI]
+    toplam = len(kalem_listesi)
+    kosuldu = sayim[KOSULDU]
+    atlandi = sayim[ATLANDI]
     return {
-        "bekleyen": len(kalem_listesi) - onayli,
+        # `bekleyen` = ONAYSIZ kalem sayısı (geriye uyumluluk). Koşulmuşları da içerir → insan metninde
+        # KULLANILMAZ (ölçüldü 16.10.2026: "kuyruk 4 bekliyor" yazıyordu ama 4 kalem KOŞULMUŞTU).
+        "bekleyen": toplam - onayli,
         "onaylı": onayli,
         "beklemede": sayim[BEKLIYOR],
-        "koşuldu": sayim[KOSULDU],
-        "atlandı": sayim[ATLANDI],
+        # Gerçekten iş bekleyen (onay bekleyen veya sahipsiz): toplam − onaylı − koşuldu − atlandı
+        "onay_bekleyen": toplam - onayli - kosuldu - atlandi,
+        "koşuldu": kosuldu,
+        "atlandı": atlandi,
         "sahipsiz": sayim[SAHIPSIZ],
-        "toplam": len(kalem_listesi),
+        "toplam": toplam,
     }
 
 

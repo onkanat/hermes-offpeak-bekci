@@ -188,9 +188,13 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
         kota_sayi = _kota_sayac.sayi(ts)
     veri: Dict[str, Any] = dict(o)
     veri.update({
+        # İnsan/bildirim özeti — YALNIZ doğru sayılar (16.10.2026 düzeltmesi): "N bekliyor" ifadesi
+        # `bekleyen` alanından geliyordu ve o alan koşulmuşları da sayıyordu ("4 bekliyor" derken
+        # 4 kalem koşulmuştu). Artık toplam/onaylı/koşuldu yazılır, iş bekleyen ayrıca eklenir.
         "ozet": (
             f"{o['pencere'].upper()} · {o['gelecek_pencere']} {o['geri_sayim']} sonra · "
-            f"kuyruk {sayilar['bekleyen']} bekliyor / {sayilar['onaylı']} onaylı"
+            f"kuyruk {sayilar['toplam']} kalem · {sayilar['onaylı']} onaylı · {sayilar['koşuldu']} koşuldu"
+            + (f" · {sayilar['onay_bekleyen']} onay/sahipsiz bekliyor" if sayilar.get("onay_bekleyen") else "")
         ),
         "kuyruk": sayilar,
         "kalemler": kalemler,
@@ -232,7 +236,8 @@ def _durum_metni(d: Dict[str, Any]) -> str:
         + (" — off-peak AKTİF" if not d.get("peak_mi") else "")
         + f" · sonraki {d.get('gelecek_pencere')} **{d.get('geri_sayim')}** sonra",
         f"- **kuyruk**: {k.get('toplam', 0)} kalem · {k.get('onaylı', 0)} onaylı · "
-        f"{k.get('koşuldu', 0)} koşuldu · {k.get('atlandı', 0)} atlandı"
+        f"{k.get('koşuldu', 0)} koşuldu · {k.get('atlandı', 0)} atlandı · "
+        f"{k.get('onay_bekleyen', 0)} onay bekliyor"
         + (f" · {k.get('sahipsiz')} sahipsiz" if k.get("sahipsiz") else ""),
         f"- **kuru koşu**: {'AÇIK (yalnız ölçer, geciktirmez)' if d.get('kuru_kosu') else 'KAPALI (gerçekten erteleyebilir)'}"
         f" · hedef hız: {d.get('hedef_hiz_dk')} çağrı/dk · erteleme tavanı: {d.get('erteleme_tavani_sn')} sn",

@@ -3,6 +3,14 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.2] — 2026-10-16
+
+- **`ozet` yanıltıcıydı, düzeltildi:** "kuyruk 4 bekliyor / 3 onaylı" yazıyordu ama o 4 kalem **koşulmuştu**
+  (`bekleyen` alanı geriye uyumluluk için "onaysız"ı sayıyor, koşulmuşları da içeriyordu). Artık özet
+  **toplam · onaylı · koşuldu** yazar; gerçekten iş bekleyen varsa `· N onay/sahipsiz bekliyor` eklenir.
+- `kuyruk` alanına **`onay_bekleyen`** eklendi (= toplam − onaylı − koşuldu − atlandı); `bekleyen` alanı
+  uyumluluk için yerinde kaldı, anlamı docstring'de yazılı. Kapı: `tests/test_komut_cikti.py` sayaç testi.
+
 ## [0.1.1] — 2026-10-16
 
 - `/offpeak-durum` artık **okunur rapor** döner (varsayılan); makine çıktısı `json` argümanına taşındı

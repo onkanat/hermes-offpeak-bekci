@@ -83,3 +83,39 @@ class CiktiTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OzetSayacTest(unittest.TestCase):
+    """`ozet` alanı YALNIZ doğru sayıları yazmalı (16.10.2026 düzeltmesi)."""
+
+    def setUp(self) -> None:
+        self.pkg = _modul()
+        self.komut = None
+
+    def _veri(self, kalemler):
+        import copy
+        from collections import Counter
+        v = dict(VERI)
+        sayim = Counter(k["durum"] for k in kalemler)
+        v["kuyruk"] = {"bekleyen": len(kalemler) - sayim.get("onaylı", 0), "onaylı": sayim.get("onaylı", 0),
+                       "beklemede": sayim.get("bekliyor", 0), "onay_bekleyen": len(kalemler) - sayim.get("onaylı", 0)
+                       - sayim.get("koşuldu", 0) - sayim.get("atlandı", 0), "koşuldu": sayim.get("koşuldu", 0),
+                       "atlandı": sayim.get("atlandı", 0), "sahipsiz": sayim.get("sahipsiz", 0), "toplam": len(kalemler)}
+        v["kalemler"] = kalemler
+        v["ozet"] = (f"{v['pencere'].upper()} · {v['gelecek_pencere']} {v['geri_sayim']} sonra · "
+                     f"kuyruk {len(kalemler)} kalem · {v['kuyruk']['onaylı']} onaylı · {v['kuyruk']['koşuldu']} koşuldu"
+                     + (f" · {v['kuyruk']['onay_bekleyen']} onay/sahipsiz bekliyor" if v["kuyruk"]["onay_bekleyen"] else ""))
+        # üretim yolunu kullan: _durum_verisi'ni sabitleyip _komut_durum ile metni al
+        self.pkg._durum_verisi = lambda ctx=None: v
+        return self.pkg._komut_durum(None)("")
+
+    def test_hepsi_kosulduysa_bekleyen_yazmaz(self):
+        cikti = self._veri([{"id": f"K-{i:03d}", "durum": "koşuldu", "metin": "x"} for i in range(1, 8)])
+        self.assertIn("7 kalem · 0 onaylı · 7 koşuldu", cikti)
+        self.assertNotIn("bekliyor", cikti.splitlines()[0])   # başlıkta yanıltıcı "bekliyor" olmaz
+        self.assertIn("**onay bekleyen**: yok", cikti)
+
+    def test_bekleyen_kalem_gorunur(self):
+        cikti = self._veri([{"id": "K-001", "durum": "koşuldu", "metin": "x"},
+                            {"id": "K-002", "durum": "onay-bekliyor", "metin": "y"}])
+        self.assertIn("1 onay/sahipsiz bekliyor", cikti)

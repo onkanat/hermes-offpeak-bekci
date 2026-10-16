@@ -1,15 +1,14 @@
-fix(komut): /offpeak-durum varsayılan olarak OKUNUR rapor döner; JSON `json` argümanına taşındı (0.1.1)
+fix(ozet): kuyruk özeti yanıltıcıydı — artık toplam/onaylı/koşuldu yazar (0.1.2)
 
-Belirti (kullanıcı, 16.10.2026): komutu sohbete yazdı — "chat alanında rapor çıktı ama ham json hiçbir
-şey okuyamadım". Tek satır JSON rozet içindi ama insan da aynı komutu yazıyor.
+Belirti (kullanıcı, 16.10.2026): /offpeak-durum özeti "kuyruk 4 bekliyor / 3 onaylı" diyordu; gerçek:
+7 kalem · 3 onaylı · 4 koşuldu · HİÇ bekleyen yok. Kök neden: `bekleyen` alanı geriye uyumluluk için
+"onaysız"ı sayıyor (koşulmuşlar dahil) ama insan metninde "bekliyor" diye yazılıyordu.
 
-- `/offpeak-durum`        → insan okur rapor (özet, pencere, kuyruk sayaçları, kuru koşu, kota, defter durumu)
-- `/offpeak-durum json`   → tek satır JSON (rozet yolu; anahtarlar/sözleşme DEĞİŞMEDİ)
-- Masaüstü yarısı artık `offpeak-durum json` çağırıyor (kabuk.js → plugin.js yeniden derlendi)
-- plugin.yaml 0.1.1 + komut açıklaması; CHANGELOG; README (masaüstü yarısı kurulum satırı + json argümanı)
-- Yeni kapı: tests/test_komut_cikti.py (4 test) — rapor kısa ve okunur, json sözleşmesi korunuyor,
-  okunamayan kuyruk defteri görünür.
+- ozet: "kuyruk <toplam> kalem · <onaylı> onaylı · <koşuldu> koşuldu" + varsa "· N onay/sahipsiz bekliyor"
+- kuyruk: yeni `onay_bekleyen` = toplam − onaylı − koşuldu − atlandı; `bekleyen` uyumluluk için duruyor,
+  anlamı docstring'e yazıldı
+- insan raporu kuyruk satırı onay bekleyen sayısını da yazar
+- kapı: tests/test_komut_cikti.py OzetSayacTest (2 test) — hepsi koşulduysa "bekliyor" yazmaz,
+  gerçekten bekleyen varsa görünür
 
-Kanıt: 104 test (1 ÖNCEDEN VAR OLAN başarısızlık: test_middleware.test_kuru_kosu_kapaliyken_uyku_istenir —
-9480afb'de de kırık, bu değişiklikle ilgisiz) · masaüstü kapıları 7/7 · build-desktop --check OK ·
-tools/kur.sh KURULUM TAMAM · hermes plugins validate → Validation passed.
+Kanıt: 107 test OK · JS 7/7 · build-desktop --check OK · tools/kur.sh KURULUM TAMAM · validate passed.
