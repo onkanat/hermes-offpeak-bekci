@@ -1,22 +1,22 @@
-# TASLAK — hermes-agent `plugin-catalog/` girdisi (PR AÇILMADI; yalnız bu repoda durur).
-# Katalog kuralları: hermes-agent/plugin-catalog/README.md (madde 1-17).
-# Admission: PR yalnız repo sahibi/major katkı sahibi tarafından; pin 40-hex zorunlu.
-# UYARI: `repo` adresi henüz herkese açık DEĞİL (2026-10-16 ölçümü: GitHub 404) ve bu
-# checkout'ta `origin` remote'u yok. PR'dan önce repo yayınlanmalı ve `sha` yayınlanan
-# commit'e göre tazelenmeli; aksi hâlde kurulum 404 ile düşer.
+# KATALOG GİRDİSİ (yerel kopya) — hermes-agent `plugin-catalog/offpeak-bekci.yaml` girdisinin tek kaynağı.
+# PR: https://github.com/NousResearch/hermes-agent/pull/139797 — dal `add-offpeak-bekci`, fork `onkanat/hermes-agent`.
+# Katalog kuralları: hermes-agent/plugin-catalog/README.md (madde 1-17); `sha` 40-hex zorunlu.
 #
-# sha = son içerik commit'i (kurulum yükü: plugin.yaml, __init__.py, bekci_core.py, bekci_kurulum.py,
-# desktop/, docs/, LICENSE, CHANGELOG.md). `/offpeak-kur` + `/offpeak-kaldir` ve cron deposunun salt-okunması
-# bu hatta geldi: W4b; LICENSE/CHANGELOG W5 hijyeni (16.10.2026).
+# GÖVDE EŞİTLİĞİ (ölçülür, iddia edilmez): PR'a giden dosya bu dosyanın yorumsuz gövdesidir —
+# `name:` satırından sonrası birebir aynı olmalı. Doğrulama:
+#   sed -n '/^name:/,$p' plugin-catalog/offpeak-bekci.yaml | shasum -a 256
+#   16.10.2026 (0.1.1): 82ec8096a4dbc3b24da977b684dd7314ff0c4f42f5442c3f07b2dd8331a8a320
 #
-# PIN ↔ HEAD KURALI (ölçülmüş sınır, W5): bir commit kendi hash'ini taşıyamaz (sabit nokta —
-# pin satırı o commit'in içeriğinin parçası olduğu için hash değişir). Bu yüzden pin = YAYIN
-# AĞACINI taşıyan son içerik commit'i olur; `sha:` satırını tazeleyen defterleme commit'i onun
-# üstüne bir adım olarak binmek zorundadır. Kabul ölçütü: `git diff <pin> <HEAD>` çıktısı YALNIZ
-# `sha:` satırını göstermeli (başka fark yok).
+# PIN KURALI: pin = YAYIN AĞACINI taşıyan, yayınlanmış son içerik commit'i (bir commit kendi hash'ini
+# taşıyamaz → sabit nokta yok; `sha:` satırını tazeleyen defterleme commit'i onun üstüne biner).
+# Şu an `555dff2…` = main ucu: 0.1.1 yükü + kapı/hijyen düzeltmeleri. Pin tazeleme gerekçesi
+# (0.1.0 → 0.1.1): `/offpeak-durum` varsayılanı OKUNUR rapor oldu, makine biçimi `json` argümanına
+# taşındı; iki yarı (sunucu + masaüstü) BİRLİKTE güncellenmelidir.
+#
+# TEMİZ KLONDA KABUL (atlanmaz): git clone https://github.com/onkanat/hermes-offpeak-bekci /tmp/x #   && git -C /tmp/x checkout 555dff262a37a35f615dc03f82320db3bf34ccca #   && hermes plugins validate /tmp/x --install-deps   → EXIT=0 (16.10.2026: geçti)
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
-sha: 15dcd63e45326d98b7a3a99caaa87c4be3269023
+sha: 555dff262a37a35f615dc03f82320db3bf34ccca
 title: Off-Peak Bekçi
 description: >-
   Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
@@ -32,11 +32,11 @@ description: >-
   kuyruk özetini yerel günlüğe yazar.
   Kurulum opt-in'dir: `/offpeak-kur` kurulacak cron işini TAM gösterir (iş adı, zamanlama,
   promptun tamamı, monitör, workdir, araç kümeleri, teslim) ve `plan_hash` ister; onay
-  hash'e bağlıdır ve yalnız kurulum İSTEĞİ oturuma bırakılır — işi ajanın kendi cron aracı
+  hash'e bağlıdır ve yalnız kurulum İSTEĞİ oturuma bırakılır — işi ajanın kendi cron aracıyla
   kurar. Otomatik bırakma host'a bağlıdır (ölçüm: `hermes_cli/plugins_injection.py:18-32`):
   klasik CLI oturumunda istek ajanın kuyruğuna girer; Ink TUI / masaüstü-panel host'unda
   çekirdek kalıcı `session_key` ister ve o anahtar komut handler'ına verilmediği için komut
-  kurulacak parametreleri tek satır JSON olarak basar (işi yine ajanın cron aracı kurar,
+  kurulacak parametreleri tek satır JSON olarak basar (işi yine ajanın cron aracıyla kurar,
   isteği kullanıcı ajana verir). Anahtarı okumanın tek yolu özel çekirdek modülü
   `gateway.session_context`ten geçer (kural 9 → kullanılmaz); gateway'e enjeksiyon ayrıca
   `plugins.entries.offpeak-bekci.allow_gateway_injection: true` ister (varsayılan kapalı).
@@ -55,10 +55,12 @@ description: >-
 maintainer: onkanat
 tier: community
 category: desktop
-version: "0.1.0"
+version: "0.1.1"
 requires_hermes: ">=0.22.2"
 docs_url: https://github.com/onkanat/hermes-offpeak-bekci#readme
 platforms: []
+screenshots:
+  - https://raw.githubusercontent.com/onkanat/hermes-offpeak-bekci/555dff262a37a35f615dc03f82320db3bf34ccca/docs/rozet.png
 capabilities:
   provides_tools: []
   provides_hooks:
