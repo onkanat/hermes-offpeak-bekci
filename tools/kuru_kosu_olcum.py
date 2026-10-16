@@ -6,6 +6,9 @@
   2. istek başına ek gecikme **< 5 ms** (middleware'in hesap + günlük yazma maliyeti),
   3. kontrol koşumu: ``kuru_kosu: false`` — aynı yükte uyku **istenir** (> 0). Böylece
      (1)'in "kapı ölü" yüzünden değil, gerçekten kuru koşu olduğu için sağlandığı görülür.
+     Kontrol kolu canlı ``offpeak-bekci`` bloğunu **boş** gösterir (``SahteHermesConfig``):
+     blok ``kuru_kosu: true`` beyan ettiği sürece ctx'in ``false``'u ezilir (W4a-1 sırası) ve
+     kontrol yanlış negatif verirdi (ölçüldü 16.10.2026: 0 uyku → "KALDI").
 
 Neden saat enjekte edilir: gece dışı (off-peak) bir saatte koşulursa ``gerekli_sn`` zaten 0
 olurdu ve ölçüm hiçbir şeyi kanıtlamazdı. Bu yüzden ``core.utc`` sabit bir **peak** anına
@@ -25,6 +28,7 @@ import os
 import sys
 import tempfile
 import time
+import types
 from pathlib import Path
 
 KOK = Path(__file__).resolve().parents[1]
@@ -52,6 +56,42 @@ class SahteBaglam:
 
     def get_config(self, anahtar, varsayilan=None):
         return self.ayarlar.get(anahtar, varsayilan)
+
+
+class SahteHermesConfig:
+    """``hermes_cli.config.load_config_readonly`` sahtesi (kurulum gerekmez).
+
+    Kontrol kolu için şart: etkin ayar sırası ``config.yaml:offpeak-bekci`` > ``ctx.config`` >
+    şema varsayılanı'dır (şartname W4a-1). Canlı blok ``kuru_kosu: true`` beyan ettiği sürece
+    ctx'in ``kuru_kosu=False`` değeri **ezilir**; o zaman (B) kontrolü yanlış negatif verir:
+    "uyku çağrısı = 0" — kapı ölü sanılır, oysa kuru koşudadır (ölçüldü 16.10.2026, aynı koşum
+    ``SONUÇ: KALDI``). ``SahteHermesConfig({})`` bloğu boş gösterir → ctx kazanır.
+    Aynı desen: ``tests/test_ayar_zinciri.py`` · ``tests/test_middleware.py``.
+    """
+
+    def __init__(self, blok):
+        self._blok = blok
+        self._yedek = {}
+
+    def __enter__(self):
+        for ad in ("hermes_cli", "hermes_cli.config"):
+            self._yedek[ad] = sys.modules.get(ad)
+        paket = types.ModuleType("hermes_cli")
+        paket.__path__ = []  # paket gibi davran (alt modül sys.modules'ta bulunur)
+        yaprak = types.ModuleType("hermes_cli.config")
+        setattr(yaprak, "load_config_readonly",
+                lambda: ({"offpeak-bekci": self._blok} if self._blok is not None else {}))
+        sys.modules["hermes_cli"] = paket
+        sys.modules["hermes_cli.config"] = yaprak
+        return self
+
+    def __exit__(self, *bos):
+        for ad, eski in self._yedek.items():
+            if eski is None:
+                sys.modules.pop(ad, None)
+            else:
+                sys.modules[ad] = eski
+        return False
 
 
 class Gunluk:
@@ -152,12 +192,23 @@ def main() -> int:
             "kayit": kayitlar_a[-1] if kayitlar_a else None,
         }
         # ── B) kontrol: kuru_kosu=false ───────────────────────────────────
+        # Canlı blok KAPATILMAZSA kontrol yanlış negatif verir: blok `kuru_kosu: true`
+        # beyan ettiği sürece ctx'in `false`'u ezilir (W4a-1 sırası) ve kapı "ölü" görünür.
         UYKULAR = []
         _sifirla(mod)
         j_b = gecici / "kont.jsonl"
-        sureler_b, kayitlar_b = _kosum(
-            mod, SahteBaglam(kuru_kosu=False, olcum_dosyasi=str(j_b)), UYKULAR, j_b
+        # TEK değişken farkı: `kuru_kosu`. Eşikler A koluyla aynı verilir (aksi hâlde
+        # "aynı yükte" iddiası gevşek kalır ve tavan varsayılanı devreye girer).
+        ctx_b = SahteBaglam(
+            kuru_kosu=False,
+            olcum_dosyasi=str(j_b),
+            hedef_hiz_dk=int(blok.get("hedef_hiz_dk", core.VARSAYILAN_AYARLAR["hedef_hiz_dk"])),
+            erteleme_tavani_sn=float(
+                blok.get("erteleme_tavani_sn", core.VARSAYILAN_AYARLAR["erteleme_tavani_sn"])
+            ),
         )
+        with SahteHermesConfig({}):
+            sureler_b, kayitlar_b = _kosum(mod, ctx_b, UYKULAR, j_b)
         sonuc["kontrol"] = {
             "istek": ISTEK_SAYISI,
             "uyku_cagrisi": len(UYKULAR),
@@ -196,6 +247,10 @@ def main() -> int:
         and sonuc["kontrol"]["uyku_cagrisi"] > 0
         and (sonuc["kuru"]["kayit"] or {}).get("uygulanacak_sn") == 0.0
         and (sonuc["kuru"]["kayit"] or {}).get("gerekli_sn", 0) > 0
+        # A kolu canlı blokla koşar → blok bir değer beyan ediyorsa günlükte O görünmeli
+        # (aksi hâlde "canlı config ile ölçüldü" iddiası kanıtsız kalır).
+        and (blok.get("hedef_hiz_dk") is None
+             or (sonuc["kuru"]["kayit"] or {}).get("hedef_hiz_dk") == int(blok["hedef_hiz_dk"]))
         and not gunluk.mesajlar  # yutulan hata varsa ölçüm geçersiz
     )
     if gunluk.mesajlar:
