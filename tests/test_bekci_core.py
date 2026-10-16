@@ -34,6 +34,21 @@ class PeakPencereTest(unittest.TestCase):
             with self.subTest(iso=iso):
                 self.assertIs(c.peak_mi(an(iso)), beklenen)
 
+    def test_deepseek_takvimi_sizmadi(self):
+        """Pencere **Ollama** tanımıdır; DeepSeek'in ``PEAK_WINDOWS=[[1,4],[6,10]]``
+        deseni sızmamalı. Ollama: hafta içi 12:00–18:00 UTC peak. DeepSeek deseninde
+        peak/sınır saatleri 01,04,06,10 çevresindedir — burada hiçbiri sınır değil.
+        """
+        for saat in range(0, 12):
+            with self.subTest(saat=saat):
+                self.assertIs(c.peak_mi(an(f"{PZT}{saat:02d}:00:00+00:00")), False)
+        for saat in range(12, 18):
+            with self.subTest(saat=saat):
+                self.assertIs(c.peak_mi(an(f"{PZT}{saat:02d}:00:00+00:00")), True)
+        for saat in range(18, 24):
+            with self.subTest(saat=saat):
+                self.assertIs(c.peak_mi(an(f"{PZT}{saat:02d}:00:00+00:00")), False)
+
     def test_pencere_adi(self):
         self.assertEqual(c.pencere(an(f"{PZT}12:00:00+00:00")), "peak")
         self.assertEqual(c.pencere(an(f"{PZT}18:00:00+00:00")), "off-peak")
@@ -81,17 +96,37 @@ class PolitikaTest(unittest.TestCase):
         self.assertEqual((off["gerekli_sn"], off["uygulanacak_sn"]), (0.0, 0.0))
 
     def test_gecikme_tavani_ve_kuru_kosu(self):
+        """Beklenti FORMÜLDEN türetildi (16.10.2026'da gerekçelendirildi).
+
+        ``gecikme_planla``: ``fazla = sayi_60sn - hedef_hiz_dk``,
+        ``gerekli = fazla * (60 / hedef_hiz_dk)`` (yani fazla çağrı × bir "slot").
+        Varsayılan hedef 6/dk → slot 10 sn; 60 çağrı → fazla 54 → gerekli 54 × 10 = **540 sn**.
+        Testin eski beklentisi 480 sn formülle tutarsızdı (480, fazla=48 ⇒ hedef=12 varsayar);
+        doğru olan ölçülen değerdir: 540. Tavan 30 sn olduğu için uygulanacak 30 sn'ye kırpılır,
+        kuru koşuda ise hiç uygulanmaz (yalnız raporlanır).
+        """
         tav = c.gecikme_planla(an(f"{PZT}13:00:00+00:00"), 60, erteleme_tavani_sn=30.0, kuru_kosu=False)
-        self.assertEqual((tav["gerekli_sn"], tav["uygulanacak_sn"]), (480.0, 30.0))
+        self.assertEqual((tav["fazla"], tav["gerekli_sn"], tav["uygulanacak_sn"]), (54, 540.0, 30.0))
         kuru = c.gecikme_planla(an(f"{PZT}13:00:00+00:00"), 60, kuru_kosu=True)
-        self.assertEqual((kuru["gerekli_sn"], kuru["uygulanacak_sn"]), (480.0, 0.0))
+        self.assertEqual((kuru["gerekli_sn"], kuru["uygulanacak_sn"]), (540.0, 0.0))
 
     def test_kayan_pencere(self):
+        """Pencere YARI AÇIK: ``(ts - pencere_sn, ts]`` → tam 60 sn önceki kayıt sayılmaz.
+
+        60 sn'lik pencerede 1000 ve 1030 kayıtlıyken 1070'te 1000 tam 60 sn yaşındadır →
+        ``sayi(1070) == 1`` (ölçülen buydu; eski 2 beklentisi kapalı sınır varsayıyordu).
+        Sınırın tam üstündeki (0.001 sn daha genç) kayıt ise sayılır.
+        """
         p = c.KayanPencere(60.0)
         self.assertEqual(p.kayit(1000.0), 1)
         self.assertEqual(p.kayit(1030.0), 2)
-        self.assertEqual(p.sayi(1070.0), 2)
-        self.assertEqual(p.kayit(1070.0), 1)
+        self.assertEqual(p.sayi(1070.0), 1)  # 1000 pencerenin dışında
+        self.assertEqual(p.kayit(1070.0), 2)  # 1030 hâlâ içeride
+        s = c.KayanPencere(60.0)
+        s.kayit(1010.0)
+        self.assertEqual(s.sayi(1070.0), 0, "tam 60 sn önceki kayıt sayılmaz")
+        s.kayit(1010.001)
+        self.assertEqual(s.sayi(1070.0), 1, "0.001 sn daha genç kayıt sayılır")
         p.sifirla()
         self.assertEqual(p.sayi(1070.0), 0)
 

@@ -17,7 +17,7 @@ e-posta uyarısı gider; canlı kullanım ollama.com/settings.
 UYARI: delinux01'deki ``deepseek-whale`` eklentisinin ``PEAK_WINDOWS = [[1,4],[6,10]]`` değeri
 DeepSeek API'sinin KENDİ takvimidir (kaynak: api-docs.deepseek.com) — bizim sağlayıcımız Ollama
 olduğu için burada KULLANILMAZ.
-(bkz. tests/test_pencere.py::test_deepseek_takvimi_sizmadi)
+(bkz. tests/test_bekci_core.py::PeakPencereTest.test_deepseek_takvimi_sizmadi)
 """
 
 from __future__ import annotations
@@ -219,16 +219,26 @@ def gecikme_planla(
 
 
 class KayanPencere:
-    """Kayan zaman penceresinde olay sayacı (saf: zaman dışarıdan verilir)."""
+    """Kayan zaman penceresinde olay sayacı (saf: zaman dışarıdan verilir).
+
+    SINIR SEMANTİĞİ — YARI AÇIK: pencere ``(ts - pencere_sn, ts]``.
+    Yani ``sayi(ts)``/``kayit(ts)`` çağrıldığında anı **tam** ``pencere_sn`` saniye önce
+    olan kayıt pencere DIŞIdır (``k > ts - pencere_sn``), ``ts`` anındaki kayıt İÇİdedir.
+    "Son 60 saniyedeki çağrı" ifadesinin karşılığı budur: 60 saniye önce yapılmış çağrı
+    artık o dakikaya ait değildir. (16.10.2026: testin eski beklentisi kapalı sınır
+    varsayıyordu — ölçülen değer doğruydu, beklenti düzeltildi.)
+    """
 
     def __init__(self, pencere_sn: float = 60.0) -> None:
         self.pencere_sn = float(pencere_sn)
         self._kayitlar: List[float] = []
 
     def _budur(self, ts: float) -> None:
+        if not self._kayitlar:
+            return
         esik = float(ts) - self.pencere_sn
-        if self._kayitlar and self._kayitlar[0] < esik:
-            self._kayitlar = [k for k in self._kayitlar if k >= esik]
+        if self._kayitlar[0] <= esik:  # en eski kayıt pencerenin dışında → süpür
+            self._kayitlar = [k for k in self._kayitlar if k > esik]
 
     def kayit(self, ts: float) -> int:
         """``ts`` anındaki olayı kaydeder; penceredeki toplam sayıyı döner."""
