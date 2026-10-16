@@ -16,7 +16,7 @@
 # `sha:` satırını göstermeli (başka fark yok).
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
-sha: 5c877db60d6467464e1107e62f7f24d8ea2aedea
+sha: 15dcd63e45326d98b7a3a99caaa87c4be3269023
 title: Off-Peak Bekçi
 description: >-
   Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
