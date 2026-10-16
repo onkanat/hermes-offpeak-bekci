@@ -36,14 +36,18 @@ def _ozel_ip(mi: re.Match) -> bool:
 ADLAR = re.compile(r"delinux01|aikonsol|akillibidik|ecepc|ece_pc|[a-z]*-?pi2b01|gozcu|webmaster", re.I)
 #: Kişisel mutlak yol
 YOL = re.compile(r"/Users/[a-zA-Z]|/home/[a-z][a-z0-9_-]*/")
-#: Sır kalıpları
-SIR = re.compile(r"sk-[A-Za-z0-9]{10,}|API_SERVER_KEY|API_KEY\s*=\s*['\"]|BEGIN [A-Z ]*PRIVATE KEY")
+#: Sır kalıpları — PARÇALARDAN kurulur ki kapı kendi kaynak dosyasını işaretlemesin (aksi hâlde
+#: `tests/test_hijyen.py` içindeki kalıp tanımı "sızıntı" sayılırdı; 16.10.2026'da ölçüldü).
+_K = "KEY"
+SIR = re.compile(
+    r"sk-[A-Za-z0-9]{10,}|" + "API_SERVER_" + _K + "|" + "API_" + _K + r"\s*=\s*['\"]|BEGIN [A-Z ]*PRIVATE " + _K
+)
 
 #: Genel/örnek adresler (hiçbir makineyi göstermez) — bilinçli istisna
 IZINLI_ADRES = {"10.0.0.1", "10.0.0.2"}
 #: Bu dosyalarda yalnız AD/ADRES kalıpları muaf (içerikleri bu kalıpları KASITLI olarak anar).
 #: **SIR ve YOL her zaman denetlenir** — yoksa kapı kendi test dosyalarında saklanabilir hâle gelir
-#: (16.10.2026'da ölçüldü: muaf dosyaya eklenen `API_KEY = "..."` satırı kapıyı YEŞİL bırakıyordu).
+#: (16.10.2026'da ölçüldü: muaf dosyaya eklenen anahtar satırı kapıyı YEŞİL bırakıyordu).
 MUAF_AD_ADRES = {
     "tests/test_hijyen.py",
     "tests/test_ayarlar.py",
