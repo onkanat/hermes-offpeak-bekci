@@ -169,6 +169,7 @@ const DURUM_ESANLAMLILARI = {
   ok: ONAYLI,
   done: ONAYLI,
   tamam: ONAYLI,
+  onay: ONAYLI,
   x: ONAYLI,
   bekliyor: BEKLIYOR,
   'onay-bekliyor': BEKLIYOR,
@@ -177,13 +178,39 @@ const DURUM_ESANLAMLILARI = {
   beklemede: BEKLIYOR,
   pending: BEKLIYOR,
   open: BEKLIYOR,
-  taslak: BEKLIYOR
+  taslak: BEKLIYOR,
+  sırada: BEKLIYOR,
+  sirada: BEKLIYOR,
+  koşuldu: 'koşuldu',
+  kosuldu: 'koşuldu',
+  'koşuldu.': 'koşuldu',
+  'çalıştırıldı': 'koşuldu',
+  calistirildi: 'koşuldu',
+  ran: 'koşuldu',
+  'atlandı': 'atlandı',
+  atlandi: 'atlandı',
+  skipped: 'atlandı',
+  iptal: 'atlandı',
+  reddedildi: 'atlandı',
+  rejected: 'atlandı',
+  sahipsiz: 'sahipsiz',
+  'atanmamış': 'sahipsiz',
+  atanmamis: 'sahipsiz',
+  ownerless: 'sahipsiz',
+  unassigned: 'sahipsiz'
 }
 
 const TABLO_BASLIKLARI = new Set([
   'id', 'iş', 'is', 'kalem', 'sahip', 'owner', 'kanıt', 'kanit', 'kanıt/dosya',
   'durum', 'status', 'pencere', 'efor', 'effort', 'not', 'notlar', 'başlık', 'baslik'
 ])
+
+/** Tablo başlığında durum kolonunu bildiren hücre adları (kuyruk defteri ölçütü). */
+const DURUM_BASLIKLARI = new Set(['durum', 'status'])
+/** Tablo başlığında kimlik kolonunu bildiren hücre adları. */
+const ID_BASLIKLARI = new Set(['id', 'kimlik', 'kalem', 'iş', 'is'])
+/** Baş sözcük eşleşmesinde kullanılmayan kısa eşanlamlılar (gürültüye açık: "x", "ok", "tamam"). */
+const DURUM_ONEK_DISLA = new Set(['x', 'ok', 'tamam', 'done', 'onay'])
 
 const TABLO_ID = /^`?[A-Za-z]{1,6}-?\d+`?$/
 const TABLO_EFOR = /^`?e-\d+`?$/i
@@ -210,8 +237,55 @@ function durumNormallestir(ham, kutu) {
   return BEKLIYOR
 }
 
-/** `| a | b |` satırını hücrelere çözer; tablo değilse/ayraçsa null. */
-function tabloHucreleri(satir) {
+/** Hücrenin BAŞ sözcüğünü durum sözlüğünde arar (ör. `**koşuldu** 16.10.2026 …`). */
+function durumOnek(hucre) {
+  const t = temizle(hucre).trim()
+
+  if (!t) {
+    return null
+  }
+  const ilk = t.split(/[\s`*_]+/)[0].replace(/[`*_.:,;]+$/g, '').toLowerCase()
+
+  if (!ilk || DURUM_ONEK_DISLA.has(ilk)) {
+    return null
+  }
+
+  return DURUM_ESANLAMLILARI[ilk] ?? null
+}
+
+/** Durum hücresi: önce birebir sözcük, sonra baş sözcük. Boşsa null. */
+function durumHucre(hucre) {
+  const t = String(hucre ?? '').trim()
+
+  if (!t) {
+    return null
+  }
+  const duz = temizle(t).trim().toLowerCase()
+
+  if (DURUM_ESANLAMLILARI[duz] !== undefined) {
+    return DURUM_ESANLAMLILARI[duz]
+  }
+
+  return durumOnek(t)
+}
+
+/** Durum hücresinde YALNIZ durum sözcüğünü değiştirir: kalın işaret ve ek not korunur. */
+export function durumHucreYaz(ham) {
+  const h = String(ham ?? '')
+  const m = /^(\s*[`*_]*)([^\s`*_]+)/.exec(h)
+
+  if (!m) {
+    const bas = /^\s*/.exec(h)[0]
+    const son = /\s*$/.exec(h)[0]
+
+    return (bas || ' ') + ONAYLI + (son || ' ')
+  }
+
+  return h.slice(0, m[1].length) + ONAYLI + h.slice(m[1].length + m[2].length)
+}
+
+/** `| a | b |` satırını hücrelere çözer (ayraç satırı DA döner); tablo değilse null. */
+function tabloHucreleriHam(satir) {
   const m = /^\s*\|(.+)\|\s*$/.exec(satir ?? '')
 
   if (!m) {
@@ -226,18 +300,82 @@ function tabloHucreleri(satir) {
     hucreler.push({ ham: hm[0], bas: hm.index, son: hm.index + hm[0].length })
     hm = re.exec(ic)
   }
-  if (!hucreler.length) {
-    return null
-  }
-  if (hucreler.every(h => TABLO_AYRAC_HUCRE.test(h.ham.trim()) || !h.ham.trim())) {
+
+  return hucreler.length ? { ic, hucreler } : null
+}
+
+function ayracSatiriMi(hucreler) {
+  return (
+    Array.isArray(hucreler) &&
+    hucreler.length > 0 &&
+    hucreler.every(h => TABLO_AYRAC_HUCRE.test(String(h.ham).trim()) || !String(h.ham).trim())
+  )
+}
+
+/** `| a | b |` satırını hücrelere çözer; tablo değilse/ayraçsa null. */
+function tabloHucreleri(satir) {
+  const t = tabloHucreleriHam(satir)
+
+  if (!t || ayracSatiriMi(t.hucreler)) {
     return null
   }
 
-  return { ic, hucreler }
+  return t
+}
+
+/**
+ * Tablo satırlarını (1 tabanlı satır no) tablonun başlık bilgisine eşler.
+ * Başlığında `durum`/`status` kolonu olmayan tablo kuyruk defteri değildir (koşum kaydı,
+ * ölçüm tablosu): satırları kalem sayılmaz. Başlıksız tablolar için değer null (eski davranış).
+ */
+export function tabloBaslikHaritasi(satirlar) {
+  const harita = new Map()
+  const liste = Array.isArray(satirlar) ? satirlar.map(s => String(s ?? '').replace(/\r$/, '')) : []
+  let i = 0
+
+  while (i < liste.length) {
+    if (!tabloHucreleriHam(liste[i])) {
+      i += 1
+      continue
+    }
+    const blok = []
+
+    while (i < liste.length) {
+      const h = tabloHucreleriHam(liste[i])
+
+      if (!h) {
+        break
+      }
+      blok.push({ no: i + 1, hucreler: h.hucreler })
+      i += 1
+    }
+    let veri = blok
+    let baslikBilgisi = null
+
+    if (blok.length >= 2 && ayracSatiriMi(blok[1].hucreler)) {
+      const baslik = blok[0].hucreler.map(h => temizle(h.ham).toLowerCase())
+      const durumIdx = baslik.findIndex(t => DURUM_BASLIKLARI.has(t))
+      const idIdx = baslik.findIndex(t => ID_BASLIKLARI.has(t))
+
+      baslikBilgisi = {
+        durum_idx: durumIdx < 0 ? null : durumIdx,
+        id_idx: idIdx < 0 ? null : idIdx
+      }
+      veri = blok.slice(2)
+    }
+    for (const { no, hucreler } of veri) {
+      if (ayracSatiriMi(hucreler)) {
+        continue
+      }
+      harita.set(no, baslikBilgisi)
+    }
+  }
+
+  return harita
 }
 
 /** Tek satırı kaleme çevirir; kalem değilse null. */
-export function kalemAyristir(satir, no = 0) {
+export function kalemAyristir(satir, no = 0, baslik = null) {
   const tablo = tabloHucreleri(satir)
 
   if (tablo) {
@@ -248,17 +386,45 @@ export function kalemAyristir(satir, no = 0) {
     if (!dolu.length || dolu.every(t => TABLO_BASLIKLARI.has(t.toLowerCase()))) {
       return null
     }
+    if (baslik) {
+      // Başlığında durum kolonu YOKSA bu tablo kuyruk defteri değildir (koşum kaydı vb.).
+      if (baslik.durum_idx === null || baslik.durum_idx === undefined) {
+        return null
+      }
+      const dIdx = baslik.durum_idx
+      let kidHam =
+        baslik.id_idx !== null && baslik.id_idx !== undefined ? temiz[baslik.id_idx] : ''
+
+      if (!kidHam || !TABLO_ID.test(kidHam)) {
+        kidHam = temiz.find(t => TABLO_ID.test(t))
+      }
+      if (!kidHam || dIdx >= temiz.length) {
+        return null
+      }
+
+      return {
+        id: kidHam.replace(/`/g, ''),
+        durum: durumHucre(temiz[dIdx]) ?? BEKLIYOR,
+        efor: temiz.find(t => TABLO_EFOR.test(t)) ?? '',
+        satir_no: no,
+        metin: String(satir).trim()
+      }
+    }
     const kidHam = temiz.find(t => TABLO_ID.test(t))
 
     if (!kidHam || hucreler.length < 4) {
       return null
     }
     const durumHam = temiz.find(t => DURUM_ESANLAMLILARI[t.toLowerCase()] !== undefined)
+    const durum =
+      durumHam !== undefined
+        ? DURUM_ESANLAMLILARI[durumHam.toLowerCase()]
+        : (temiz.map(t => durumOnek(t)).find(Boolean) ?? BEKLIYOR)
     const eforHam = temiz.find(t => TABLO_EFOR.test(t))
 
     return {
       id: kidHam.replace(/`/g, ''),
-      durum: durumHam ? DURUM_ESANLAMLILARI[durumHam.toLowerCase()] : BEKLIYOR,
+      durum,
       efor: eforHam ?? '',
       satir_no: no,
       metin: String(satir).trim()
@@ -306,9 +472,14 @@ export function kalemAyristir(satir, no = 0) {
 export function kuyrukAyristir(metin) {
   const kalemler = []
   const satirlar = String(metin ?? '').split('\n')
+  const basliklar = tabloBaslikHaritasi(satirlar)
 
   for (let i = 0; i < satirlar.length; i += 1) {
-    const kalem = kalemAyristir(satirlar[i].replace(/\r$/, ''), i + 1)
+    const kalem = kalemAyristir(
+      satirlar[i].replace(/\r$/, ''),
+      i + 1,
+      basliklar.get(i + 1) ?? null
+    )
 
     if (kalem) {
       kalemler.push(kalem)

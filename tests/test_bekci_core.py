@@ -201,6 +201,74 @@ class KuyrukTest(unittest.TestCase):
         self.assertEqual(c.id_listesi_coz("K-001, K-002 K-002   T-9"), ["K-001", "K-002", "T-9"])
         self.assertEqual(c.id_listesi_coz(""), [])
 
+    # ── tablo başlığı ölçütü: kuyruk defteri olmayan tablo kalem SAYILMAZ ──
+    KOSUM_KAYDI = """\
+| id | iş | sahip | kanıt ölçütü | durum | pencere |
+|----|----|-------|--------------|-------|---------|
+| K-001 | **Bağlam** | MacAir | rapor | onay-bekliyor | Cuma 21:00 |
+
+### Koşum kaydı
+
+| id | pencere | başlangıç-bitiş | kanıt satırı | sonuç |
+|----|---------|-----------------|--------------|-------|
+| K-001 | off-peak (08:23–08:26) | 16.10.2026 08:23 → 08:26 | `maliyet/sorgu.txt` · EXIT=0 | tamam — teşhis: tetik 524.288 |
+| K-002 | off-peak (08:24–08:27) | 16.10.2026 08:24 → 08:27 | `skill.csv` · EXIT=0 | tamam — ayıklama 0 |
+"""
+
+    def test_kosum_kaydi_tablosu_kalem_sayilmaz(self):
+        """Başlığında ``durum`` kolonu olmayan tablo kuyruk defteri değildir.
+
+        Gerçek dosyada koşum kaydı tablosunun ``K-001``/``K-002`` satırları da kalem
+        sayılıyor, kimlikler iki kez görünüyor ve sayaçlar şişiyordu (4 kalem → 6 kalem).
+        """
+        kalemler = c.kuyruk_ayristir(self.KOSUM_KAYDI)
+        self.assertEqual([k["id"] for k in kalemler], ["K-001"])
+        self.assertEqual([k["durum"] for k in kalemler], ["bekliyor"])
+
+    def test_kosum_kaydi_satiri_onaylanmaz(self):
+        yeni, degisen = c.kuyruk_onayla(self.KOSUM_KAYDI, ["K-001", "K-002"])
+        self.assertEqual(degisen, ["K-001"])
+        self.assertNotIn("| onaylı | tamam — teşhis", yeni)
+        self.assertIn("tamam — teşhis: tetik 524.288", yeni)
+
+    def test_kalin_notlu_durum_okunur(self):
+        """Durum hücresi kalın ve yanında tarih/kanıt notu olabilir.
+
+        ``**koşuldu** 16.10.2026 08:26 — çıktı … EXIT=0`` eskiden ``bekliyor`` okunuyordu
+        (birebir sözcük eşleşmesi), sayaçlar yanlış çıkıyordu.
+        """
+        metin = (
+            "| id | iş | sahip | kanıt | durum | pencere |\n"
+            "|----|----|-------|-------|-------|---------|\n"
+            "| K-001 | **a** | MacAir | ölçüm | **koşuldu** 16.10.2026 08:26 — çıktı `m/rapor.md` · EXIT=0 | Cuma |\n"
+            "| K-002 | **b** | MacAir | ölçüm | **onay-bekliyor** (kullanıcı, 16.10.2026 08:05) | Cuma |\n"
+            "| K-003 | **c** | MacAir | ölçüm |  | Cuma |\n"
+        )
+        kalemler = c.kuyruk_ayristir(metin)
+        self.assertEqual([k["durum"] for k in kalemler], ["koşuldu", "bekliyor", "bekliyor"])
+        s = c.kuyruk_sayilari(kalemler)
+        self.assertEqual((s["toplam"], s["onaylı"], s["koşuldu"], s["beklemede"]), (3, 0, 1, 2))
+
+    def test_onaylama_hucredeki_notu_silmez(self):
+        """Onaylama YALNIZ durum sözcüğünü değiştirir: kalın işaret ve ek not korunur."""
+        metin = (
+            "| id | durum | not | sahip |\n"
+            "|----|-------|-----|-------|\n"
+            "| K-007 | **onay-bekliyor** (kullanıcı, 16.10.2026 08:05) | kanıt | MacAir |\n"
+        )
+        yeni, degisen = c.kuyruk_onayla(metin, ["K-007"])
+        self.assertEqual(degisen, ["K-007"])
+        self.assertIn("| **onaylı** (kullanıcı, 16.10.2026 08:05) |", yeni)
+
+    def test_onaylama_kosuldu_kalemi_degistirmez(self):
+        metin = (
+            "| id | durum | iş | sahip |\n"
+            "|----|-------|----|-------|\n"
+            "| K-008 | **koşuldu** 16.10.2026 08:26 | iş | MacAir |\n"
+        )
+        yeni, degisen = c.kuyruk_onayla(metin, ["K-008"])
+        self.assertEqual((degisen, yeni), ([], metin))
+
 
 GERCEK = Path.home() / "MacAir" / "off-peak-kuyruk.md"
 
@@ -214,6 +282,15 @@ class GercekDosyaTest(unittest.TestCase):
         self.assertIn("K-001", kimlikler)
         for k in kalemler:
             self.assertIn(k["durum"], {"bekliyor", "onaylı", "koşuldu", "atlandı", "sahipsiz"})
+
+    @unittest.skipUnless(GERCEK.exists(), "kullanıcının kuyruk dosyası yok")
+    def test_gercek_kuyruk_tekil_kimlik(self):
+        """Aynı kimlik iki kez görünmemeli (koşum kaydı tablosu kalem sayılmaz) ve
+        ``toplam`` gerçek kalem sayısına eşit olmalı."""
+        kalemler = c.kuyruk_ayristir(GERCEK.read_text(encoding="utf-8"))
+        kimlikler = [k["id"] for k in kalemler]
+        self.assertEqual(len(kimlikler), len(set(kimlikler)), "yinelenen kimlik: %r" % kimlikler)
+        self.assertEqual(c.kuyruk_sayilari(kalemler)["toplam"], len(kalemler))
 
 
 if __name__ == "__main__":

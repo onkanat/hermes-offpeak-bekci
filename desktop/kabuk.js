@@ -133,10 +133,29 @@ function tikle() {
   depo.set(karar.anahtar, true)
 }
 
-/** Kuyruk sayılarını backend'den tazeler (başarısızsa son değer korunur). */
+/** Kuyruk sayılarını backend'den tazeler (başarısızsa son değer korunur).
+ *
+ * ÖLÇÜLDÜ (16.10.2026 08:02/08:37, `~/.hermes/logs/agent.log`): `slash.exec` oturuma
+ * bağlı bir RPC'dir (`tui_gateway/server.py` "session-scoped RPC rejected … not in
+ * memory"). `session_id` gönderilmezse gateway isteği reddeder ve rozet sonsuza dek
+ * yerel `0/0` değerinde kalır. Bu yüzden odaklı oturumun runtime kimliği geçilir
+ * (SDK: `host.state.focusedSessionId`, bkz. desktop-plugin-sdk.md).
+ */
 async function sayilariTazele() {
+  const sid = (() => {
+    try {
+      return host.state?.focusedSessionId?.get?.() ?? null
+    } catch {
+      return null
+    }
+  })()
+
+  if (!sid) {
+    return // odaklı oturum yok: RPC'yi hiç denemeyiz, son bilinen sayılar kalır
+  }
+
   try {
-    const yanit = await host.request('slash.exec', { command: 'offpeak-durum' })
+    const yanit = await host.request('slash.exec', { session_id: sid, command: 'offpeak-durum' })
     const yeni = yanitCoz(yanit)
 
     if (yeni) {

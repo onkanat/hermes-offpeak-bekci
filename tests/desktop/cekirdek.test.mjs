@@ -146,6 +146,37 @@ test('kuyruk tablosu: kalem satırı sayılır, başlık/ayraç/ölçüm satır�
   assert.equal(kalemAyristir('|---|---|'), null, 'ayraç satırı kalem değil')
 })
 
+test('koşum kaydı tablosu kalem sayılmaz + kalın/notlu durum okunur', async () => {
+  const { durumHucreYaz } = await import('../../desktop/bekci-cekirdek.js')
+  const ornek = [
+    '| id | iş | sahip | kanıt ölçütü | durum | pencere |',
+    '|----|----|-------|--------------|-------|---------|',
+    '| K-001 | **Bağlam** | MacAir / default | rapor | **koşuldu** 16.10.2026 08:26 — çıktı `m/rapor.md` · EXIT=0 | Cuma 21:00 |',
+    '| K-002 | **Skill** | MacAir / default | rapor | **onay-bekliyor** (kullanıcı, 16.10.2026 08:05) | Cuma 21:00 |',
+    '',
+    '### Koşum kaydı',
+    '',
+    '| id | pencere | başlangıç-bitiş | kanıt satırı | sonuç |',
+    '|----|---------|-----------------|--------------|-------|',
+    '| K-001 | off-peak (08:23–08:26) | 16.10.2026 08:23 → 08:26 | `m/1.txt` · EXIT=0 | tamam — teşhis: tetik 524.288 |',
+    '| K-002 | off-peak (08:24–08:27) | 16.10.2026 08:24 → 08:27 | `m/2.csv` · EXIT=0 | tamam — ayıklama 0 |'
+  ].join('\n')
+  const kalemler = kuyrukAyristir(ornek)
+
+  // koşum kaydı K-001/K-002 satırları kalem değil → kimlikler yinelenmez
+  assert.deepEqual(kalemler.map(k => k.id), ['K-001', 'K-002'])
+  assert.deepEqual(kalemler.map(k => k.durum), ['koşuldu', 'bekliyor'])
+  // `bekleyen` = "onaysız" (geriye uyumlu tanım, bkz. bekci_core.kuyruk_sayilari);
+  // `koşuldu` kalem de onaysız sayılır → 2. Yalnız durumu `bekliyor` olanlar `beklemede`dir.
+  assert.deepEqual(kuyrukSayilari(kalemler), {
+    bekleyen: 2, onaylı: 0, beklemede: 1, 'koşuldu': 1, 'atlandı': 0, sahipsiz: 0, toplam: 2
+  })
+
+  // onaylama yalnız durum sözcüğünü değiştirir: kalın işaret ve ek not korunur
+  assert.equal(durumHucreYaz(' **onay-bekliyor** (kullanıcı, 08:05) '), ' **onaylı** (kullanıcı, 08:05) ')
+  assert.equal(durumHucreYaz('  '), '  onaylı  ')
+})
+
 test('plugin.js tek dosya: yalnız izinli specifier importları + gömülü çekirdek', () => {
   const kaynak = readFileSync(resolve(kok, 'desktop/plugin.js'), 'utf8')
   const importlar = [...kaynak.matchAll(/^\s*import\s+.+?from\s+'([^']+)'/gm)].map(m => m[1])

@@ -281,6 +281,14 @@ _TABLO_BASLIKLARI = {
     "durum", "status", "pencere", "efor", "effort", "not", "notlar", "başlık", "baslik",
 }
 
+#: Tablo başlığında durum kolonunu bildiren hücre adları (kuyruk defteri ölçütü).
+_DURUM_BASLIKLARI = {"durum", "status"}
+#: Tablo başlığında kimlik kolonunu bildiren hücre adları.
+_ID_BASLIKLARI = {"id", "kimlik", "kalem", "iş", "is"}
+#: Baş sözcük eşleşmesinde KULLANILMAYAN kısa eşanlamlılar (gürültüye açık: "x", "ok",
+#: "tamam" — bir kanıt hücresi "tamam — teşhis: …" diye başlayabilir).
+_DURUM_ONEK_DISLA = {"x", "ok", "tamam", "done", "onay"}
+
 ONAYLI = "onaylı"
 BEKLIYOR = "bekliyor"
 KOSULDU = "koşuldu"
@@ -313,8 +321,50 @@ def _durum_normallestir(ham: Optional[str], kutu: Optional[str] = None) -> str:
     return BEKLIYOR
 
 
-def _tablo_hucreleri(satir: str) -> Optional[List[Dict[str, Any]]]:
-    """``| a | b |`` satırını hücre konumlarıyla çözer. Tablo değilse/ayraçsa ``None``."""
+def _durum_onek(hucre: Optional[str]) -> Optional[str]:
+    """Hücrenin BAŞ sözcüğünü durum sözlüğünde arar.
+
+    Kuyruk defterinde durum hücresi kalın yazılır ve yanına tarih/kanıt notu eklenir
+    (ör. ``**koşuldu** 16.10.2026 08:26 — çıktı … EXIT=0``). Birebir eşleşme bunları
+    ``bekliyor``a düşürüp sayaçları yanlış gösteriyordu; baş sözcük eşleşmesi bunu kapatır.
+    """
+    t = str(hucre or "").strip().strip("`*_").strip()
+    if not t:
+        return None
+    ilk = re.split(r"[\s`*_]+", t)[0].strip("`*_.:,;").lower()
+    if not ilk or ilk in _DURUM_ONEK_DISLA:
+        return None
+    return _DURUM_ESANLAMLILARI.get(ilk)
+
+
+def _durum_hucre(hucre: Optional[str]) -> Optional[str]:
+    """Tablo durum hücresini çözer: önce birebir sözcük, sonra baş sözcük. Boşsa ``None``."""
+    t = str(hucre or "").strip()
+    if not t:
+        return None
+    duz = t.strip("`*_").strip().lower()
+    if duz in _DURUM_ESANLAMLILARI:
+        return _DURUM_ESANLAMLILARI[duz]
+    return _durum_onek(t)
+
+
+def _durum_hucre_yaz(ham: str) -> str:
+    """Durum hücresinde YALNIZ durum sözcüğünü değiştirir: kalın işaret ve ek not korunur.
+
+    ``**onay-bekliyor** (kullanıcı, 16.10.2026 08:05)`` → ``**onaylı** (kullanıcı, 16.10.2026 08:05)``.
+    Hücre boşsa ``" onaylı "``. Böylece onaylama, hücredeki kanıt/not metnini silmez.
+    """
+    ham = str(ham or "")
+    m = re.match(r"^(\s*[`*_]*)([^\s`*_]+)", ham)
+    if not m:
+        bosluk_bas = ham[: len(ham) - len(ham.lstrip())]
+        bosluk_son = ham[len(ham.rstrip()):]
+        return (bosluk_bas or " ") + ONAYLI + (bosluk_son or " ")
+    return ham[: m.start(2)] + ONAYLI + ham[m.end(2):]
+
+
+def _tablo_hucreleri_ham(satir: str) -> Optional[List[Dict[str, Any]]]:
+    """``| a | b |`` satırını hücre konumlarıyla çözer (ayraç satırı DA döner); tablo değilse ``None``."""
     m = _TABLO_SATIRI.match(str(satir or ""))
     if not m:
         return None
@@ -323,15 +373,79 @@ def _tablo_hucreleri(satir: str) -> Optional[List[Dict[str, Any]]]:
         {"ham": hm.group(0), "bas": hm.start(), "son": hm.end()}
         for hm in re.finditer(r"[^|]+", ic)
     ]
-    if not hucreler:
+    return hucreler or None
+
+
+def _ayrac_satiri_mi(hucreler: Sequence[Dict[str, Any]]) -> bool:
+    """``|---|---|`` (ya da tümü boş) satır mı?"""
+    return bool(hucreler) and all(
+        _TABLO_AYRAC_HUCRE.match(str(h["ham"]).strip()) or not str(h["ham"]).strip()
+        for h in hucreler
+    )
+
+
+def _tablo_hucreleri(satir: str) -> Optional[List[Dict[str, Any]]]:
+    """``| a | b |`` satırını hücre konumlarıyla çözer. Tablo değilse/ayraçsa ``None``."""
+    hucreler = _tablo_hucreleri_ham(satir)
+    if not hucreler or _ayrac_satiri_mi(hucreler):
         return None
-    if all(_TABLO_AYRAC_HUCRE.match(h["ham"].strip()) or not h["ham"].strip() for h in hucreler):
-        return None  # |---|---| ayraç satırı
     return hucreler
 
 
-def _tablo_kalemi(satir: str, no: int) -> Optional[Dict[str, Any]]:
-    """Tablo satırını kaleme çevirir; başlık/ayraç/boş satırda ``None``."""
+def tablo_baslik_haritasi(
+    satirlar: Sequence[str],
+) -> Dict[int, Optional[Dict[str, Optional[int]]]]:
+    """Tablo satırlarını (1 tabanlı satır no) ait oldukları tablonun başlık bilgisine eşler.
+
+    Markdown kuralı: başlık satırını ``|---|`` ayracı izler. Bir tablonun başlığında
+    ``durum``/``status`` kolonu yoksa o tablo kuyruk defteri DEĞİLDİR (ör. koşum kaydı
+    tablosu) → satırları kalem sayılmaz ve hiçbiri onaylanmaz. Başlıksız tablolar ile
+    tablo olmayan satırlar için değer ``None`` (eski davranış korunur).
+
+    Neden gerekli: koşum kaydı tablosunun ``K-001``/``K-002`` satırları da kalem sayılıp
+    kimlikleri iki kez gösteriyordu (4 kalem → 6 kalem).
+    """
+    harita: Dict[int, Optional[Dict[str, Optional[int]]]] = {}
+    satir_listesi = [str(s or "").rstrip("\r") for s in (satirlar or [])]
+    i = 0
+    while i < len(satir_listesi):
+        if _tablo_hucreleri_ham(satir_listesi[i]) is None:
+            i += 1
+            continue
+        blok: List[Tuple[int, List[Dict[str, Any]]]] = []
+        while i < len(satir_listesi):
+            h = _tablo_hucreleri_ham(satir_listesi[i])
+            if h is None:
+                break
+            blok.append((i + 1, h))
+            i += 1
+        veri = blok
+        baslik_bilgisi: Optional[Dict[str, Optional[int]]] = None
+        if len(blok) >= 2 and _ayrac_satiri_mi(blok[1][1]):
+            baslik = [str(h["ham"]).strip().strip("`*_").lower() for h in blok[0][1]]
+            baslik_bilgisi = {
+                "durum_idx": next(
+                    (j for j, t in enumerate(baslik) if t in _DURUM_BASLIKLARI), None
+                ),
+                "id_idx": next((j for j, t in enumerate(baslik) if t in _ID_BASLIKLARI), None),
+            }
+            veri = blok[2:]
+        for no, hucreler in veri:
+            if _ayrac_satiri_mi(hucreler):
+                continue
+            harita[no] = baslik_bilgisi
+    return harita
+
+
+def _tablo_kalemi(
+    satir: str, no: int, baslik: Optional[Dict[str, Optional[int]]] = None
+) -> Optional[Dict[str, Any]]:
+    """Tablo satırını kaleme çevirir; başlık/ayraç/boş satırda ``None``.
+
+    ``baslik`` verilmişse (bu tablonun başlık satırı görüldüyse) durum YALNIZ başlıkta
+    bildirilen ``durum`` kolonundan okunur; başlıkta böyle bir kolon yoksa satır kalem
+    sayılmaz (koşum kaydı/ölçüm tabloları).
+    """
     hucreler = _tablo_hucreleri(satir)
     if not hucreler:
         return None
@@ -341,6 +455,24 @@ def _tablo_kalemi(satir: str, no: int) -> Optional[Dict[str, Any]]:
         return None
     if all(t.lower() in _TABLO_BASLIKLARI for t in dolu):
         return None  # başlık satırı
+    if baslik is not None:
+        d_idx = baslik.get("durum_idx")
+        if d_idx is None:
+            return None  # kuyruk defteri değil: başlığında durum/status kolonu yok
+        i_idx = baslik.get("id_idx")
+        kid = (temiz[i_idx] if i_idx is not None and i_idx < len(temiz) else "") or ""
+        if not _TABLO_ID.match(kid.strip("`")):
+            kid = next((t for t in temiz if _TABLO_ID.match(t)), "")
+        if not kid or d_idx >= len(temiz):
+            return None
+        efor = next((t for t in temiz if _TABLO_EFOR.match(t)), "")
+        return {
+            "id": kid.strip("`"),
+            "durum": _durum_hucre(temiz[d_idx]) or BEKLIYOR,
+            "efor": efor,
+            "satir_no": no,
+            "metin": str(satir).strip(),
+        }
     kid = next((t for t in temiz if _TABLO_ID.match(t)), "")
     if not kid or len(hucreler) < 4:
         # Kuyruk kalemi tablosu: id hücresi AÇIK olmalı ve satır en az 4 hücreli.
@@ -348,21 +480,25 @@ def _tablo_kalemi(satir: str, no: int) -> Optional[Dict[str, Any]]:
         return None
     durum = next(
         (_DURUM_ESANLAMLILARI[t.lower()] for t in temiz if t.lower() in _DURUM_ESANLAMLILARI),
-        BEKLIYOR,
+        None,
     )
+    if durum is None:
+        durum = next((_durum_onek(t) for t in temiz if _durum_onek(t)), None)
     efor = next((t for t in temiz if _TABLO_EFOR.match(t)), "")
     return {
         "id": kid.strip("`"),
-        "durum": durum,
+        "durum": durum or BEKLIYOR,
         "efor": efor,
         "satir_no": no,
         "metin": str(satir).strip(),
     }
 
 
-def _kalem_ayristir_satir(satir: str, no: int) -> Optional[Dict[str, Any]]:
-    """Tek satırı kaleme çevirir (önce tablo, sonra madde işareti biçimi)."""
-    tablo = _tablo_kalemi(satir, no)
+def _kalem_ayristir_satir(
+    satir: str, no: int, baslik: Optional[Dict[str, Optional[int]]] = None
+) -> Optional[Dict[str, Any]]:
+    """Tek satırı kaleme çevirir (önce tablo — ``baslik`` bilgisiyle —, sonra madde biçimi)."""
+    tablo = _tablo_kalemi(satir, no, baslik)
     if tablo:
         return tablo
     m = _SATIR_KALEMI.match(str(satir or ""))
@@ -406,8 +542,10 @@ def kuyruk_ayristir(metin: str) -> List[Dict[str, Any]]:
     Başlık (``| ID | … | DURUM | … |``) ve ayraç (``|---|---|``) satırları atlanır.
     """
     kalemler: List[Dict[str, Any]] = []
-    for i, satir in enumerate(str(metin or "").splitlines(), start=1):
-        kalem = _kalem_ayristir_satir(satir, i)
+    satirlar = str(metin or "").splitlines()
+    basliklar = tablo_baslik_haritasi(satirlar)
+    for i, satir in enumerate(satirlar, start=1):
+        kalem = _kalem_ayristir_satir(satir, i, basliklar.get(i))
         if kalem:
             kalemler.append(kalem)
     return kalemler
@@ -456,6 +594,7 @@ def kuyruk_onayla(metin: str, idler: Sequence[str]) -> Tuple[str, List[str]]:
     if not hedef:
         return str(metin or ""), degisen
     satirlar = str(metin or "").splitlines(keepends=True)
+    basliklar = tablo_baslik_haritasi([s.rstrip("\r\n") for s in satirlar])
     for idx, satir in enumerate(satirlar):
         yalin = satir.rstrip("\r\n")
         son = satir[len(yalin):]
@@ -467,22 +606,35 @@ def kuyruk_onayla(metin: str, idler: Sequence[str]) -> Tuple[str, List[str]]:
             dolu = [t for t in temiz if t]
             if not dolu or all(t.lower() in _TABLO_BASLIKLARI for t in dolu):
                 continue  # başlık ya da boş satır
-            kid = next((t for t in temiz if _TABLO_ID.match(t)), "")
+            baslik = basliklar.get(idx + 1)
+            if baslik is not None and baslik.get("durum_idx") is None:
+                continue  # bu tablo kuyruk defteri DEĞİL (koşum kaydı/ölçüm): dokunulmaz
+            if baslik is None and len(hucreler) < 4:
+                continue  # başlıksız tabloda eski kalem ölçütü
+            i_idx = baslik.get("id_idx") if baslik is not None else None
+            kid = (temiz[i_idx] if i_idx is not None and i_idx < len(temiz) else "") or ""
+            if not _TABLO_ID.match(kid):
+                kid = next((t for t in temiz if _TABLO_ID.match(t)), "")
             kid = kid.strip("`")
-            if not kid or len(hucreler) < 4 or kid not in hedef:
+            if not kid or kid not in hedef:
                 continue
-            durum_idx = next(
-                (i for i, t in enumerate(temiz) if t.lower() in _DURUM_ESANLAMLILARI), None
+            d_idx = (
+                baslik.get("durum_idx")
+                if baslik is not None
+                else next(
+                    (i for i, t in enumerate(temiz) if t.lower() in _DURUM_ESANLAMLILARI), None
+                )
             )
-            if durum_idx is not None and _DURUM_ESANLAMLILARI[temiz[durum_idx].lower()] == ONAYLI:
-                continue  # zaten onaylı
-            if durum_idx is None:
-                durum_idx = next((i for i, h in enumerate(hucreler) if not h["ham"].strip()), None)
-            if durum_idx is not None:
-                hucre = hucreler[durum_idx]
-                bosluk_bas = hucre["ham"][: len(hucre["ham"]) - len(hucre["ham"].lstrip())]
-                bosluk_son = hucre["ham"][len(hucre["ham"].rstrip()):]
-                yeni_hucre = (bosluk_bas or " ") + ONAYLI + (bosluk_son or " ")
+            suanki = (
+                _durum_hucre(temiz[d_idx]) if d_idx is not None and d_idx < len(temiz) else None
+            )
+            if suanki in (ONAYLI, KOSULDU, ATLANDI):
+                continue  # zaten onaylı/koşulmuş/atlanmış
+            if d_idx is None:
+                d_idx = next((i for i, h in enumerate(hucreler) if not h["ham"].strip()), None)
+            if d_idx is not None and d_idx < len(hucreler):
+                hucre = hucreler[d_idx]
+                yeni_hucre = _durum_hucre_yaz(hucre["ham"])
                 govde_bas = tablo_m.start(1) + hucre["bas"]
                 govde_son = tablo_m.start(1) + hucre["son"]
                 yeni_yalin = yalin[:govde_bas] + yeni_hucre + yalin[govde_son:]
@@ -506,8 +658,8 @@ def kuyruk_onayla(metin: str, idler: Sequence[str]) -> Tuple[str, List[str]]:
         if kid not in hedef:
             continue
         dm = _DURUM_ALANI.search(govde_temiz)
-        if dm and _durum_normallestir(dm.group(1)) == ONAYLI:
-            continue  # zaten onaylı (alan)
+        if dm and _durum_normallestir(dm.group(1)) in (ONAYLI, KOSULDU, ATLANDI):
+            continue  # zaten onaylı/koşulmuş/atlanmış (alan)
         if kutu is not None and kutu.lower() == "x":
             continue  # zaten onaylı (kutu)
         yeni_govde = govde_temiz

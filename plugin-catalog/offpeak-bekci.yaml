@@ -1,0 +1,43 @@
+# TASLAK — hermes-agent `plugin-catalog/` girdisi (PR AÇILMADI; yalnız bu repoda durur).
+# Katalog kuralları: hermes-agent/plugin-catalog/README.md (madde 1-17).
+# Admission: PR yalnız repo sahibi/major katkı sahibi tarafından; pin 40-hex zorunlu.
+# UYARI: `repo` adresi henüz herkese açık DEĞİL (2026-10-16 ölçümü: GitHub 404) ve bu
+# checkout'ta `origin` remote'u yok. PR'dan önce repo yayınlanmalı ve `sha` yayınlanan
+# commit'e göre tazelenmeli; aksi hâlde kurulum 404 ile düşer.
+name: offpeak-bekci
+repo: https://github.com/onkanat/hermes-offpeak-bekci
+sha: 178cd2640a77b7478e8882ce8e4ff2b770184117
+title: Off-Peak Bekçi
+description: >-
+  Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
+  geri sayımını ve kuyrukta onay bekleyen/onaylı iş kalemlerini gösterir (pencere tanımı
+  Ollama'nın off-peak saatleri: hafta içi 18:00-12:00 UTC penceresi, hafta sonu tek blok),
+  pencere başlamadan 30 dakika önce bir kez toast uyarır ve onayı `/offpeak-onayla <id,id>`
+  ile kullanıcıdan alır — onaysız iş koşmaz. Gövde tarafında `llm_execution` middleware'i
+  yalnız Ollama Cloud çağrılarında, yalnız peak penceresinde, son 60 sn'deki çağrı sayısı
+  hedef hızı (varsayılan 6/dk) aştıysa tavanlı kısa bir bekleme uygular; saatlik kota tavanı
+  aşıldığında (varsayılan 120/saat) uyarı kaydı yazar, isteği iptal etmez. Varsayılan
+  `kuru_kosu: true` — eklenti ölçer, geciktirmez; canlıya almak için config.yaml'da
+  `offpeak-bekci.kuru_kosu: false`. `on_session_end` kancası oturum sonunda pencere/kota/
+  kuyruk özetini yerel günlüğe yazar. Disclosure — ağ çağrısı yok, telemetri yok, sır
+  okumaz/yazmaz: yalnız yerel dosyalar okunur (`~/MacAir/off-peak-kuyruk.md` kuyruk dosyası,
+  salt-okuma) ve kullanıcı onay verdiğinde yalnız o kuyruk dosyası atomik olarak yazılır
+  (`/offpeak-onayla`; dosyanın içeriğini eklenti üretmez, kullanıcının dosyasıdır). Ölçüm/
+  uyarı satırları yerel JSONL'e yazılır (varsayılan `~/.hermes/offpeak-bekci/olcum.jsonl`).
+  Kabuk/süreç çalıştırmaz, uzaktan kod indirmez, kendi kendini güncellemez; masaüstü tarafı
+  `desktop/plugin.js` yalnız eklenti SDK yüzeyini kullanır (prototip yamalama, eval, DOM
+  sorgulama yok).
+maintainer: onkanat
+tier: community
+category: desktop
+version: "0.1.0"
+requires_hermes: ">=0.22.2"
+docs_url: https://github.com/onkanat/hermes-offpeak-bekci#readme
+platforms: []
+capabilities:
+  provides_tools: []
+  provides_hooks:
+    - on_session_end
+  provides_middleware:
+    - llm_execution
+  requires_env: []
