@@ -21,7 +21,7 @@
 # TEMİZ KLONDA KABUL (atlanmaz): git clone https://github.com/onkanat/hermes-offpeak-bekci /tmp/x && git -C /tmp/x checkout a3427af7e6344cf7070b45afc69d21c9126a6201 && hermes plugins validate /tmp/x --install-deps   → EXIT=0 (16.10.2026: geçti; bağımlılık olmadığı için --install-deps no-op'tur)
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
-sha: a3427af7e6344cf7070b45afc69d21c9126a6201
+sha: 0581ed7bb13b59836ed6b34c2c166621e7ab5a35
 title: Off-Peak Bekçi
 description: >-
   Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
@@ -60,7 +60,7 @@ description: >-
 maintainer: onkanat
 tier: community
 category: desktop
-version: "0.1.2"
+version: "0.1.3"
 requires_hermes: ">=0.22.2"
 docs_url: https://github.com/onkanat/hermes-offpeak-bekci#readme
 platforms: []
