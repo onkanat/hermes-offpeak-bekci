@@ -1,0 +1,101 @@
+{
+  "ayar": {
+    "cache_read_tavani_gun": 750000000,
+    "erteleme_tavani_sn": 600.0,
+    "hedef_hiz_dk": 15,
+    "kota_penceresi_sn": 3600.0,
+    "kota_tavani": 120,
+    "kota_token_gun": 20000000,
+    "kuru_kosu": true,
+    "kuyruk_dosyasi": "/tmp/offpeak-olcum/gecici-kuyruk.md",
+    "off_peak_only_isler": [
+      "kuyruk-cok-turlu",
+      "context-compress",
+      "skill-envanteri",
+      "fms200-indeks"
+    ],
+    "olcum_dosyasi": "~/.hermes/offpeak-bekci/olcum.jsonl",
+    "on_bildirim_dk": 30,
+    "pencere_sn": 60.0,
+    "schedule": "5 18 * * 1-5",
+    "schedule_gecerli": true,
+    "varsayilanlar": {
+      "cache_read_tavani_gun": 0,
+      "erteleme_tavani_sn": 30.0,
+      "hedef_hiz_dk": 6,
+      "kota_penceresi_sn": 3600.0,
+      "kota_tavani": 120,
+      "kota_token_gun": 0,
+      "kuru_kosu": true,
+      "kuyruk_dosyasi": "~/.hermes/offpeak-bekci/kuyruk.md",
+      "off_peak_only_isler": [],
+      "olcum_dosyasi": "~/.hermes/offpeak-bekci/olcum.jsonl",
+      "on_bildirim_dk": 30,
+      "pencere_sn": 60.0,
+      "schedule": "5 18 * * 1-5"
+    }
+  },
+  "erteleme_tavani_sn": 600.0,
+  "gelecek_gecis_utc": "2026-10-16T12:00:00+00:00",
+  "gelecek_pencere": "peak",
+  "geri_sayim": "05:24",
+  "hedef_hiz_dk": 15,
+  "kalan_sn": 19409,
+  "kalemler": [
+    {
+      "durum": "bekliyor",
+      "efor": "",
+      "id": "G-001",
+      "metin": "| G-001 | geçici kalem 1 | webmaster | EXIT=0 | bekliyor | test |",
+      "satir_no": 12
+    },
+    {
+      "durum": "bekliyor",
+      "efor": "",
+      "id": "G-002",
+      "metin": "| G-002 | geçici kalem 2 | webmaster | EXIT=0 | bekliyor | test |",
+      "satir_no": 13
+    },
+    {
+      "durum": "bekliyor",
+      "efor": "",
+      "id": "G-003",
+      "metin": "| G-003 | geçici kalem 3 | webmaster | EXIT=0 | onay-bekliyor | test |",
+      "satir_no": 14
+    },
+    {
+      "durum": "onaylı",
+      "efor": "",
+      "id": "G-004",
+      "metin": "| G-004 | geçici kalem 4 | webmaster | EXIT=0 | onaylı | test |",
+      "satir_no": 15
+    }
+  ],
+  "kota": {
+    "asildi": false,
+    "sayi": 0,
+    "tavan": 120,
+    "uyari": false
+  },
+  "kota_penceresi_sn": 3600.0,
+  "kuru_kosu": true,
+  "kuyruk": {
+    "atlandı": 0,
+    "beklemede": 3,
+    "bekleyen": 3,
+    "koşuldu": 0,
+    "onaylı": 1,
+    "sahipsiz": 0,
+    "toplam": 4
+  },
+  "kuyruk_dosyasi": "/tmp/offpeak-olcum/gecici-kuyruk.md",
+  "kuyruk_dosyasi_var": true,
+  "kuyruk_hata": null,
+  "offpeak_anahtari": "2026-10-15T18:00:00+00:00",
+  "ozet": "OFF-PEAK · peak 05:24 sonra · kuyruk 3 bekliyor / 1 onaylı",
+  "peak_mi": false,
+  "pencere": "off-peak",
+  "son_60sn": 0,
+  "t30_dk": 30,
+  "t30_icerisinde": false
+}
