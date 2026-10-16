@@ -61,29 +61,53 @@ def _dosyalar() -> list[pathlib.Path]:
     return [KOK / d for d in cikti.split() if d]
 
 
+def _satir_ihlalleri(rel: str, metin: str) -> list[str]:
+    """Tek dosyanın satır satır ihlallerini döndürür — muafiyet DESEN bazlıdır.
+
+    Muaf dosyalarda yalnız AD/ADRES kalıpları serbesttir; **SIR ve YOL her dosyada her zaman** denetlenir
+    (yoksa kapı kendi test dosyalarında saklanabilir hâle gelir; 16.10.2026'da ölçüldü).
+    """
+    muaf_ad = rel in MUAF_AD_ADRES
+    out: list[str] = []
+    for i, satir in enumerate(metin.splitlines(), 1):
+        if not muaf_ad:
+            for m in IPV4.finditer(satir):
+                if _ozel_ip(m) and m.group(0) not in IZINLI_ADRES:
+                    out.append(f"{rel}:{i} tam IP → {m.group(0)}")
+            e_ad = ADLAR.search(satir)
+            if e_ad:
+                out.append(f"{rel}:{i} makine/ajan adı → {e_ad.group(0)}")
+            e_yol = YOL.search(satir)
+            if e_yol:
+                out.append(f"{rel}:{i} kişisel yol → {e_yol.group(0)}")
+        e_sir = SIR.search(satir)           # SIR: her dosyada, her zaman
+        if e_sir:
+            out.append(f"{rel}:{i} sır kalıbı → {e_sir.group(0)}")
+    return out
+
+
 class HijyenKapisi(unittest.TestCase):
     def test_ic_altyapi_izi_yok(self):
         ihlal: list[str] = []
         for p in _dosyalar():
             if not p.is_file():
                 continue
-            rel = str(p.relative_to(KOK))
-            muaf_ad = rel in MUAF_AD_ADRES          # ad/adres kalıpları muaf, SIR ve YOL değil
-            for i, satir in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
-                if not muaf_ad:
-                    for m in IPV4.finditer(satir):
-                        if _ozel_ip(m) and m.group(0) not in IZINLI_ADRES:
-                            ihlal.append(f"{rel}:{i} tam IP → {m.group(0)}")
-                    e_ad = ADLAR.search(satir)
-                    if e_ad:
-                        ihlal.append(f"{rel}:{i} makine/ajan adı → {e_ad.group(0)}")
-                    e_yol = YOL.search(satir)
-                    if e_yol:
-                        ihlal.append(f"{rel}:{i} kişisel yol → {e_yol.group(0)}")
-                e_sir = SIR.search(satir)           # SIR: her dosyada, her zaman
-                if e_sir:
-                    ihlal.append(f"{rel}:{i} sır kalıbı → {e_sir.group(0)}")
+            ihlal += _satir_ihlalleri(str(p.relative_to(KOK)),
+                                      p.read_text(encoding="utf-8", errors="ignore"))
         self.assertEqual(ihlal, [], "yayın hijyeni ihlali:\n  " + "\n  ".join(ihlal))
+
+    def test_muafiyet_desen_bazli(self):
+        """Muaf dosyada AD/ADRES serbest, SIR yasak — kapının kendi kör noktası (16.10.2026).
+
+        akillibidik bağımsız ölçtü: muaf dosyaya konan anahtar satırı kapıyı YEŞİL bırakıyordu.
+        """
+        anahtar = "API_" + "KEY" + ' = "GERCEK-SIR-1234567890"'
+        self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", anahtar),
+                        "muaf dosyada sır YAKALANMALI")
+        self.assertEqual(_satir_ihlalleri("tests/test_ayarlar.py", "# örnek 192.168.1.9 ve delinux01"), [],
+                         "muaf dosyada ad/adres serbest olmalı")
+        self.assertTrue(_satir_ihlalleri("bekci_core.py", "# 192.168.1.9 ve delinux01"),
+                        "muaf olmayan dosyada ad/adres YAKALANMALI")
 
 
 if __name__ == "__main__":
