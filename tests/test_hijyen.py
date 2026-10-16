@@ -77,9 +77,9 @@ def _satir_ihlalleri(rel: str, metin: str) -> list[str]:
             e_ad = ADLAR.search(satir)
             if e_ad:
                 out.append(f"{rel}:{i} makine/ajan adı → {e_ad.group(0)}")
-            e_yol = YOL.search(satir)
-            if e_yol:
-                out.append(f"{rel}:{i} kişisel yol → {e_yol.group(0)}")
+        e_yol = YOL.search(satir)           # YOL: her dosyada, her zaman (SIR gibi — muaf DEĞİL)
+        if e_yol:
+            out.append(f"{rel}:{i} kişisel yol → {e_yol.group(0)}")
         e_sir = SIR.search(satir)           # SIR: her dosyada, her zaman
         if e_sir:
             out.append(f"{rel}:{i} sır kalıbı → {e_sir.group(0)}")
@@ -104,6 +104,11 @@ class HijyenKapisi(unittest.TestCase):
         anahtar = "API_" + "KEY" + ' = "GERCEK-SIR-1234567890"'
         self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", anahtar),
                         "muaf dosyada sır YAKALANMALI")
+        # yol kalıbı da muaf DEĞİL (akillibidik'in #2 bulgusu; kalıbı bu dosyayı işaretlememesi için
+        # parçalardan kuruyoruz — bu dosya da MUAF_AD_ADRES içinde)
+        yol = "/home/" + "hakan" + "/gizli/id_rsa"
+        self.assertTrue(_satir_ihlalleri("tests/test_ayarlar.py", yol),
+                        "muaf dosyada kişisel yol da YAKALANMALI")
         self.assertEqual(_satir_ihlalleri("tests/test_ayarlar.py", "# örnek 192.168.1.9 ve delinux01"), [],
                          "muaf dosyada ad/adres serbest olmalı")
         self.assertTrue(_satir_ihlalleri("bekci_core.py", "# 192.168.1.9 ve delinux01"),
