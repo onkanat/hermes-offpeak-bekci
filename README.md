@@ -64,6 +64,8 @@ eklenti için **genel yüzey değil**: çekirdeğin kendi denetleyicisi yapay bi
 kullanılmaz; yani masaüstünde komut handler'ı anahtara ulaşamaz ve otomatik bırakma çalışmaz
 (çözüm kullanıcı/çekirdek kararı: ya genel bir okuma yüzeyi, ya `allow_gateway_injection` + anahtar).
 Regresyon testleri: `tests/test_kurulum.py::HostKanaliTest` (+ metin tarafı `HostBeyaniTest`).
+Ölçülen: çekirdek kaynağı satırları, çekirdeğin kendi injection testleri ve yürütülmüş sonda.
+Ölçülmeyen: gerçek Hermes.app host teslimi (eklenti tarafı stub yakalar).
 
 Prova (işi kurup hemen kaldırmadan denemek):
 
