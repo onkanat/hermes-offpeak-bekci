@@ -56,6 +56,9 @@ AYAR_KATMAN_SIRASI: Tuple[str, ...] = (
 )
 _AYAR_SIRASI: Tuple[str, ...] = (
     "kuru_kosu",
+    # Arayüz dili: "en" (varsayılan) veya "tr". Kullanıcıya görünen metinler `metinler`
+    # kataloğundan gelir; okuma `metinler.dil_sec` iledir (yok/anlaşılmaz → "en").
+    "dil",
     "kuyruk_dosyasi",
     "schedule",
     "on_bildirim_dk",
@@ -74,6 +77,7 @@ _AYAR_SIRASI: Tuple[str, ...] = (
 #: ``tests/test_ayarlar.py`` bu yedeğin şemayla ayrışmasını test eder.
 _SEMA_YEDEGI: Dict[str, Any] = {
     "kuru_kosu": True,
+    "dil": "en",
     "kuyruk_dosyasi": "~/.hermes/offpeak-bekci/kuyruk.md",
     "schedule": "5 18 * * 1-5",
     "on_bildirim_dk": 30,

@@ -6,6 +6,13 @@ dosya yazımı yok; girdi (ayarlar + bulunan yollar) parametre olarak girer, ç�
 için bayt bayt aynıdır. Bu yüzden plan/hash/kaldırma kararları gerçek kurulum olmadan
 sınanabilir (bkz. ``tests/test_kurulum.py``).
 
+DİL: kullanıcıya görünen her metin ``metinler`` kataloğundan gelir — **varsayılan İngilizce**,
+``dil: tr`` ile Türkçe (``plugin.yaml`` → ``config_schema.dil``). Dil, plana giren etkin
+ayarlardan okunur (``plan["dil"]``) ve gösterim fonksiyonlarına ``dil=`` parametresiyle de
+verilebilir. Makine alanları (``varyant``, ``teslim``, ``is_adi``, ``plan_hash``, cron
+parametreleri) dilden BAĞIMSIZDIR: dil değişince kurulum sözleşmesi değişmez, yalnız metin
+değişir (prompt da dilden bağımsız değildir — işin ajanına verilen metindir).
+
 SINIRLAR (şartname W4b):
   * Eklenti ``jobs.json``'a **YAZMAZ**. Plan yalnız ``cronjob_manage`` aracına verilecek
     parametreleri üretir; işi ajanın kendi cron aracı kurar (kullanıcı onayından sonra).
@@ -22,10 +29,16 @@ import hashlib
 import json
 from typing import Any, Dict, List, Optional, Sequence
 
+try:  # eklenti paketi içinde (yükleyici + testler) çalışırken
+    from . import metinler as _metin
+except ImportError:  # pragma: no cover — dosya tek başına (üst düzey) import edilirse
+    import metinler as _metin  # type: ignore[no-redef]
+
 #: İşi tanıyan işaret: prompt'un içinde durur, ``/offpeak-kaldir`` işi bununla bulur.
 ISARET = "[offpeak-bekci:kurulum]"
 
 #: Kurulan işin adı (ASCII: cron/CLI/günlük satırlarında kodlama sorunu çıkmasın).
+#: DİLE BAĞLI DEĞİLDİR: işin kimliğidir (kurulu işler bu adla bulunur/tanınır) — çevrilmez.
 IS_ADI = "offpeak-kuyruk-kosusu (bekci kapili)"
 
 #: Plan varyantları.
@@ -46,51 +59,30 @@ VARSAYILAN_TOOLSETLER: Sequence[str] = ("file", "terminal", "skills")
 #: Sonuç teslimi: yerel (bildirim yok; koşum kaydı cron geçmişinde kalır).
 VARSAYILAN_TESLIM = "local"
 
-#: ``/offpeak-kur`` çıktısında planın nasıl onaylanacağı.
+#: ``/offpeak-kur`` çıktısında planın nasıl onaylanacağı. DİLE BAĞLI DEĞİLDİR: komut söz
+#: dizimidir; ``onayla``/``duraklat`` argüman adları her dilde aynı yazılır (ayrıştırıcı).
 ONAY_ORNEK = "/offpeak-kur onayla <plan_hash> [duraklat]"
 
-#: "Geri alma yolu" — komut çıktıları kullanıcıya bunu söyler.
-GERI_ALMA = (
-    "geri alma: kurudan sonra `hermes cron list` ile iş id'sini bul, "
-    "`cronjob_manage action='remove' job_id=<id>` (ya da `/offpeak-kaldir onayla <id>`)"
-)
-
-#: Prompt gövdesi. ``{kuyruk}`` yer tutucusu düz ``replace`` ile doldurulur (``str.format``
-#: gömülü süslü parantezlerde kırılır — bkz. test_parite'teki 16.10.2026 dersi).
-_PROMPT = """OFF-PEAK KUYRUK KOŞUCUSU — kurulum işareti: ISARET_BUYUK
-Kuyruk defteri: {kuyruk}
-Kuyruk şeması: tablo satırı `| ID | iş | sahip | kanıt ölçütü | durum | pencere |` ya da
-madde satırı (`- id: K-001 · durum: onay-bekliyor · …`). Satır sonundaki monitör eki:
-`· ONAYLI=<n> · KOSULMAMIŞ=<m>`.
-
-KURALLAR
-1. Yalnız `durum` alanı `onaylı` olan kalemleri koş. `onay-bekliyor`/`sahipsiz` kalemlere
-   DOKUNMA: onaysız kalem hiçbir pencerede koşmaz. Onay YALNIZ kullanıcı verir
-   (`/offpeak-onayla <id,id>`); sen `durum` alanını `koşuldu` dışında hiçbir değere çevirme.
-2. Her kalem: işi yap → çıktı dosyasını/kanıtı üret → kuyrukta o kalemi `koşuldu` yap ve
-   kanıtı (EXIT kodu / dosya yolu / sayı) işle. Bitiremediğin kalemi `koşuldu` yapma, nedenini yaz.
-3. MONİTÖR SATIRI → EYLEM (satır TAM 1 satırdır; bağlamdaki `MONITOR CHANGE DETECTED` diff'i
-   önceki tike göre neyin değiştiğini gösterir):
-   3a. `OFFPEAK_BASLADI … x0.5` → pencere off-peak: kural 1'e göre `onaylı` kalemleri koş;
-       koşulacak kalem yoksa hiçbir şey koşma, 1 satır durum yaz.
-   3b. `PEAK_BASLADI … x1.0` → pencere peak: hiçbir kalemi koşma; 1 satır durum yaz
-       (`PEAK penceresi: kalem koşulmadı · ONAYLI=<n> · KOSULMAMIŞ=<m>`).
-   3c. `DEGISIKLIK_YOK · ONAYLI=<n> · KOSULMAMIŞ=<m>` + diff'te ONAYLI/KOSULMAMIŞ değişmiş →
-       pencere geçişi değil KUYRUK DEĞİŞİMİDİR (yeni onay ya da yeni kalem): pencereyi
-       monitör betiğinin `--durum` (salt sorgu) çıktısıyla doğrula; çıktı off-peak ise kural 1'i
-       uygula, peak ise hiçbir kalemi koşma, 1 satır bildir ve bitir.
-   3d. `DEGISIKLIK_YOK` + diff'te kuyruk alanları değişmemiş → hiçbir şey koşma, kuyruk
-       dosyasına yazma; 1 satır `değişiklik yok` yaz ve bitir.
-4. Kuyruk dosyası yok/bozuksa hiçbir kalemi koşma; nedeni yaz.
-5. Bu makinenin config.yaml'ını değiştirme, başka makineye/profile dokunma, yeni cron işi kurma.
-6. Sonunda en fazla 10 satır özet: koşulan kalem(ler), kanıt yolları, kalan onaylı/bekleyen
-   sayısı, engel. Bu işaret satırını (ISARET_BUYUK) silme — `/offpeak-kaldir` işi bununla bulur."""
+#: Geri alma metni artık katalogdadır (``metinler`` → ``kurulum.geri_alma``); bu sabit geriye
+#: dönük okunabilirlik için durur ve katalogdaki Türkçe metnin aynısıdır.
+GERI_ALMA = _metin.t("kurulum.geri_alma", "tr")
 
 
-def _prompt_uret(kuyruk: str) -> str:
-    """Runner prompt'u: kuyruk yolu + işaret + kurallar (düz ``replace`` ile)."""
+def _dil(plan: Dict[str, Any], dil: Optional[str] = None) -> str:
+    """Metinlerin dili: açıkça verilen ``dil``, yoksa planın kendi dili, yoksa İngilizce."""
+    return _metin.dil_sec(dil if dil is not None else plan.get("dil"))
+
+
+def _prompt_uret(kuyruk: str, dil: str = _metin.VARSAYILAN_DIL) -> str:
+    """Runner prompt'u: kuyruk yolu + işaret + kurallar (düz ``replace`` ile).
+
+    ``str.format`` KULLANILMAZ: prompt gövdesinde gömülü ``{}`` olsaydı ``KeyError`` verirdi
+    (bkz. 16.10.2026 kaydı). Bu yüzden ``metinler.t`` yer tutucusuz çağrılır, doldurma
+    ``replace`` ile yapılır.
+    """
     return (
-        _PROMPT.replace("ISARET_BUYUK", ISARET)
+        _metin.t("kurulum.prompt", dil)
+        .replace("ISARET_BUYUK", ISARET)
         .replace("{kuyruk}", str(kuyruk))
     )
 
@@ -107,26 +99,22 @@ def kurulum_plani(
 ) -> Dict[str, Any]:
     """Kurulacak işin tam planı (saf: dosya/saat okumaz).
 
-    ``ayar``: ``bekci_core`` etkin ayarları. ``monitor_var``: monitör betiği profilin
-    ``scripts/`` dizininde bulundu mu (kurulumu yapan katman ölçer, plan yalnız karar verir).
-    Monitör yoksa plan pencere açılışına zamanlanır ve gerekçesi ``uyarilar``da bildirilir —
-    monitörsüz bir işi 5 dakikada bir uyandırmak her tikte ajan koşumudur (maliyet tuzağı).
+    ``ayar``: ``bekci_core`` etkin ayarları (dil buradan gelir). ``monitor_var``: monitör betiği
+    profilin ``scripts/`` dizininde bulundu mu (kurulumu yapan katman ölçer, plan yalnız karar
+    verir). Monitör yoksa plan pencere açılışına zamanlanır ve gerekçesi ``uyarilar``da
+    bildirilir — monitörsüz bir işi 5 dakikada bir uyandırmak her tikte ajan koşumudur
+    (maliyet tuzağı).
     """
+    dil = _metin.dil_sec(ayar)
     zamanlama = POLL_ZAMANLAMA if monitor_var else str(ayar.get("schedule") or "").strip()
     monitor = VARSAYILAN_MONITOR if monitor_var else ""
     uyarilar: List[str] = []
     if not monitor_var:
-        uyarilar.append(
-            "monitör betiği bulunamadı ({}): iş yalnız pencere açılışında koşar; "
-            "hafta sonu ve gündüz off-peak pencereleri kapsanmaz.".format(VARSAYILAN_MONITOR)
-        )
+        uyarilar.append(_metin.t("kurulum.uyari.monitor_yok", dil, monitor=VARSAYILAN_MONITOR))
     if not kuyruk_var:
-        uyarilar.append(
-            "kuyruk defteri yok ({}): iş kurulsa da koşacak kalem bulunamaz; "
-            "önce defteri oluştur.".format(kuyruk_yolu)
-        )
+        uyarilar.append(_metin.t("kurulum.uyari.kuyruk_yok", dil, kuyruk=kuyruk_yolu))
     if not workdir_var or not workdir:
-        uyarilar.append("çalışma dizini yok: iş workdir'siz kurulur (profil evinden koşar).")
+        uyarilar.append(_metin.t("kurulum.uyari.workdir_yok", dil))
     plan: Dict[str, Any] = {
         "varyant": VARYANT_BEKCI if monitor_var else VARYANT_ACILIS,
         "is_adi": IS_ADI,
@@ -138,11 +126,13 @@ def kurulum_plani(
         "enabled_toolsets": list(VARSAYILAN_TOOLSETLER),
         "teslim": VARSAYILAN_TESLIM,
         "kuyruk": str(kuyruk_yolu),
-        "prompt": _prompt_uret(kuyruk_yolu),
+        "prompt": _prompt_uret(kuyruk_yolu, dil),
         "isaret": ISARET,
         "monitor_var": bool(monitor_var),
         "kuyruk_var": bool(kuyruk_var),
         "uyarilar": uyarilar,
+        # Yalnız gösterim dilidir; kurulacak alanların (ve plan_hash'in) parçası DEĞİLDİR.
+        "dil": dil,
     }
     return plan
 
@@ -151,7 +141,8 @@ def kurulacak_alanlar(plan: Dict[str, Any]) -> Dict[str, Any]:
     """Onaya konu olan alanlar (kurulacak işi birebir tanımlayanlar).
 
     ``uyarilar``/``monitor_var`` gibi *türev* alanlar hash'e girmez: hash, kurulacak işin
-    kendisini temsil etsin diye yalnız kurulum parametreleri üzerinden hesaplanır.
+    kendisini temsil etsin diye yalnız kurulum parametreleri üzerinden hesaplanır. ``dil`` de
+    türevdir (gösterim); ama prompt dile bağlı olduğu için dolaylı olarak hash'e yansır.
     """
     alanlar = ("is_adi", "zamanlama", "monitor", "workdir", "enabled_toolsets", "teslim", "prompt")
     return {alan: plan.get(alan) for alan in alanlar}
@@ -163,7 +154,9 @@ def plan_hash(plan: Dict[str, Any]) -> str:
     return hashlib.sha256(ham.encode("utf-8")).hexdigest()[:8]
 
 
-def cronjob_parametreleri(plan: Dict[str, Any], *, paused: bool = False) -> Dict[str, Any]:
+def cronjob_parametreleri(
+    plan: Dict[str, Any], *, paused: bool = False, dil: Optional[str] = None
+) -> Dict[str, Any]:
     """``cronjob_manage`` aracına verilecek parametreler (işi AJAN kurar; eklenti yazmaz)."""
     parametreler: Dict[str, Any] = {
         "action": "create",
@@ -179,7 +172,7 @@ def cronjob_parametreleri(plan: Dict[str, Any], *, paused: bool = False) -> Dict
         parametreler["workdir"] = plan["workdir"]
     if paused:
         parametreler["paused"] = True
-        parametreler["paused_reason"] = "offpeak-bekci prova: /offpeak-kur ile kuruldu, hemen kaldırılır"
+        parametreler["paused_reason"] = _metin.t("kurulum.paused_reason", _dil(plan, dil))
     return parametreler
 
 
@@ -188,24 +181,29 @@ def parametre_json(parametreler: Dict[str, Any]) -> str:
     return json.dumps(parametreler, ensure_ascii=False, sort_keys=False)
 
 
-def kurulum_bildirimi(plan: Dict[str, Any], *, paused: bool = False) -> str:
+def kurulum_bildirimi(
+    plan: Dict[str, Any], *, paused: bool = False, dil: Optional[str] = None
+) -> str:
     """``/offpeak-kur`` çıktısı: kurulacak işi TAM gösterir, hiçbir şey yaratmaz."""
-    p = cronjob_parametreleri(plan, paused=paused)
+    dil = _dil(plan, dil)
+    p = cronjob_parametreleri(plan, paused=paused, dil=dil)
+    yok = _metin.t("kurulum.deger_yok", dil)
     satirlar = [
-        "offpeak-bekci — KURULACAK İŞ (henüz hiçbir şey kurulmadı)",
-        f"  iş adı        : {plan['is_adi']}",
-        f"  zamanlama     : {plan['zamanlama']}"
-        + ("   (monitör kapılı poll: çıktı değişmezse ajan KOŞMAZ, 0 token)"
+        _metin.t("kurulum.plan.baslik", dil),
+        _metin.t("kurulum.plan.is_adi", dil, deger=plan["is_adi"]),
+        _metin.t("kurulum.plan.zamanlama", dil, deger=plan["zamanlama"])
+        + (_metin.t("kurulum.plan.monitor_kapili", dil)
            if plan["varyant"] == VARYANT_BEKCI else ""),
-        f"  monitör       : {plan['monitor'] or '(yok)'}"
+        _metin.t("kurulum.plan.monitor", dil, deger=plan["monitor"] or yok)
         + (f" ({plan['monitor_yolu']})" if plan["monitor"] and plan.get("monitor_yolu") else ""),
-        f"  çalışma dizini: {plan['workdir'] or '(yok — profil evi)'}",
-        f"  araç kümeleri : {', '.join(plan['enabled_toolsets']) or '(yok)'}",
-        f"  teslim        : {plan['teslim']} (bildirim yok; kayıt cron geçmişinde)",
-        f"  kuyruk defteri: {plan['kuyruk']}",
-        f"  varyant       : {plan['varyant']}",
+        _metin.t("kurulum.plan.workdir", dil,
+                 deger=plan["workdir"] or _metin.t("kurulum.workdir_yok", dil)),
+        _metin.t("kurulum.plan.araclar", dil, deger=", ".join(plan["enabled_toolsets"]) or yok),
+        _metin.t("kurulum.plan.teslim", dil, teslim=plan["teslim"]),
+        _metin.t("kurulum.plan.defter", dil, deger=plan["kuyruk"]),
+        _metin.t("kurulum.plan.varyant", dil, deger=plan["varyant"]),
         "",
-        "PROMPT (işin ajanına verilecek metnin tamamı):",
+        _metin.t("kurulum.plan.prompt_basligi", dil),
         "---8<---",
         plan["prompt"],
         "--->8---",
@@ -213,34 +211,35 @@ def kurulum_bildirimi(plan: Dict[str, Any], *, paused: bool = False) -> str:
         f"plan_hash: {plan_hash(plan)}",
     ]
     if plan.get("uyarilar"):
-        satirlar.append("UYARILAR:")
+        satirlar.append(_metin.t("kurulum.plan.uyarilar", dil))
         satirlar.extend(f"  - {u}" for u in plan["uyarilar"])
     ozet = plan_hash(plan)
     satirlar += [
         "",
-        f"onayla (kur)  : /offpeak-kur onayla {ozet}",
-        f"prova         : /offpeak-kur onayla {ozet} duraklat   [duraklatılmış kurulur]",
-        "kurulumu EKLENTİ yapmaz: onaydan sonra işi ajanın kendi cron aracı kurar; "
-        "eklenti jobs.json'a yazmaz.",
-        GERI_ALMA,
+        _metin.t("kurulum.plan.onay", dil, ozet=ozet),
+        _metin.t("kurulum.plan.prova", dil, ozet=ozet),
+        _metin.t("kurulum.plan.eklenti_yazmaz", dil),
+        _metin.t("kurulum.geri_alma", dil),
     ]
     return "\n".join(satirlar)
 
 
 def enjeksiyon_metni(
-    plan: Dict[str, Any], parametreler: Dict[str, Any], *, paused: bool = False
+    plan: Dict[str, Any], parametreler: Dict[str, Any], *, paused: bool = False,
+    dil: Optional[str] = None,
 ) -> str:
     """Kullanıcı onayından sonra oturuma bırakılan mesaj (ajan cron işini bununla kurar)."""
+    dil = _dil(plan, dil)
     return "\n".join([
-        f"[offpeak-bekci] Kullanıcı `/offpeak-kur onayla {plan_hash(plan)}` onayını verdi"
-        + (" (duraklatılmış kurulum)" if paused else "") + ".",
-        "Bu mesajı offpeak-bekci eklentisi üretti; içerik kullanıcı onaylı plandır.",
-        "YAPILACAK: aşağıdaki cron işini `cronjob_manage` aracıyla KUR (parametreleri değiştirme):",
+        _metin.t("kurulum.enj.baslik", dil, hash=plan_hash(plan),
+                 ek=_metin.t("kurulum.enj.duraklat.ek", dil) if paused else ""),
+        _metin.t("kurulum.enj.ureten", dil),
+        _metin.t("kurulum.enj.yapilacak", dil),
         parametre_json(parametreler),
-        "Kurduktan sonra TEK satır bildir: iş id'si + `hermes cron list` satırı"
-        + (" ve işin duraklatılmış olduğu" if paused else "") + ".",
-        f"Plan {plan_hash(plan)} · kuyruk defteri: {plan['kuyruk']}",
-        GERI_ALMA,
+        _metin.t("kurulum.enj.bildir", dil,
+                 ek=_metin.t("kurulum.enj.bildir.duraklat.ek", dil) if paused else ""),
+        _metin.t("kurulum.enj.plan", dil, hash=plan_hash(plan), kuyruk=plan["kuyruk"]),
+        _metin.t("kurulum.geri_alma", dil),
     ])
 
 
@@ -293,29 +292,32 @@ def kurulu_isleri_bul(isler: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return bulunan
 
 
-def kurulu_listesi(bulunan: Sequence[Dict[str, Any]]) -> str:
+def kurulu_listesi(bulunan: Sequence[Dict[str, Any]], *, dil: Optional[str] = None) -> str:
     """``/offpeak-kaldir`` (argümansız) çıktısı: kurulu işleri gösterir, hiçbir şey kaldırmaz."""
+    dil = _metin.dil_sec(dil)
     if not bulunan:
-        return (
-            "kurulu offpeak işi bulunamadı (profil cron deposu okundu).\n"
-            f"kur: `{ONAY_ORNEK.split(' [')[0]}`"
-        )
-    satirlar = ["offpeak-bekci — KURULU İŞLER (henüz hiçbir şey kaldırılmadı)"]
+        return "\n".join([
+            _metin.t("kurulum.liste.bos", dil, kur=ONAY_ORNEK.split(" [")[0]),
+        ])
+    satirlar = [_metin.t("kurulum.liste.baslik", dil)]
     for is_ in bulunan:
-        im = "eklenti işi" if is_["isaretli"] else "işaretsiz (elle kurulmuş olabilir)"
-        satirlar.append(
-            f"  {is_['id']} · {is_['name']} · {is_['schedule_display']} · "
-            f"{'etkin' if is_['enabled'] else 'duraklatılmış'} · durum={is_['state'] or '?'} · {im}"
-        )
-        satirlar.append(
-            f"      sonraki koşu: {is_['next_run_at'] or '-'} · monitör: {is_['monitor'] or '-'} · "
-            f"workdir: {is_['workdir'] or '-'}"
-        )
+        im = _metin.t("kurulum.liste.isaretli" if is_["isaretli"] else "kurulum.liste.isaretsiz", dil)
+        durum = _metin.t("kurulum.liste.etkin" if is_["enabled"] else "kurulum.liste.duraklatilmis", dil)
+        satirlar.append(_metin.t(
+            "kurulum.liste.satir", dil,
+            id=is_["id"], ad=is_["name"], zamanlama=is_["schedule_display"],
+            durum=durum, state=is_["state"] or "?", im=im,
+        ))
+        satirlar.append(_metin.t(
+            "kurulum.liste.detay", dil,
+            zaman=is_["next_run_at"] or "-", monitor=is_["monitor"] or "-",
+            workdir=is_["workdir"] or "-",
+        ))
     satirlar += [
         "",
-        "kaldır (onayla): /offpeak-kaldir onayla <job_id>",
-        "kaldırmayı EKLENTİ yapmaz: onaydan sonra işi ajanın kendi cron aracı kaldırır.",
-        "geri alma: /offpeak-kur ile yeniden kur (plan aynıysa aynı plan_hash).",
+        _metin.t("kurulum.liste.kaldir", dil),
+        _metin.t("kurulum.liste.eklenti_kaldirmaz", dil),
+        _metin.t("kurulum.liste.geri_alma", dil),
     ]
     return "\n".join(satirlar)
 
@@ -325,27 +327,32 @@ def kaldirma_parametreleri(job_id: str) -> Dict[str, Any]:
     return {"action": "remove", "job_id": str(job_id)}
 
 
-def kaldirma_enjeksiyon_metni(is_: Dict[str, Any]) -> str:
+def kaldirma_enjeksiyon_metni(is_: Dict[str, Any], *, dil: Optional[str] = None) -> str:
     """Onaylanan kaldırma için oturuma bırakılan mesaj."""
+    dil = _metin.dil_sec(dil)
     return "\n".join([
-        f"[offpeak-bekci] Kullanıcı `/offpeak-kaldir onayla {is_['id']}` onayını verdi.",
-        "Bu mesajı offpeak-bekci eklentisi üretti; içerik kullanıcı onaylı plandır.",
-        f"KALDIRILACAK İŞ: {is_['id']} · {is_['name']} · {is_['schedule_display']} · "
-        f"{'etkin' if is_['enabled'] else 'duraklatılmış'}",
-        "YAPILACAK: aşağıdaki cron işini `cronjob_manage` aracıyla KALDIR:",
+        _metin.t("kurulum.kaldir_enj.baslik", dil, id=is_["id"]),
+        _metin.t("kurulum.enj.ureten", dil),
+        _metin.t("kurulum.kaldir_enj.hedef", dil, id=is_["id"], ad=is_["name"],
+                 zamanlama=is_["schedule_display"],
+                 durum=_metin.t("kurulum.liste.etkin" if is_["enabled"]
+                                else "kurulum.liste.duraklatilmis", dil)),
+        _metin.t("kurulum.kaldir_enj.yapilacak", dil),
         parametre_json(kaldirma_parametreleri(is_["id"])),
-        f"Kaldırdıktan sonra TEK satır bildir: iş id'si + `hermes cron list` içinde artık "
-        f"görünmediği.",
-        "geri alma: /offpeak-kur ile yeniden kur.",
+        _metin.t("kurulum.kaldir_enj.bildir", dil),
+        _metin.t("kurulum.kaldir_enj.geri_alma", dil),
     ])
 
 
-def kaldirma_bildirimi(is_: Dict[str, Any]) -> str:
+def kaldirma_bildirimi(is_: Dict[str, Any], *, dil: Optional[str] = None) -> str:
     """Onaylı kaldırmanın komut çıktısı (kaldırma parametreleri + geri alma yolu)."""
+    dil = _metin.dil_sec(dil)
     return "\n".join([
-        f"offpeak-bekci — KALDIRMA ONAYI: {is_['id']} · {is_['name']}",
-        f"  zamanlama: {is_['schedule_display']} · durum: {is_['state'] or '?'} · "
-        f"{'etkin' if is_['enabled'] else 'duraklatılmış'}",
-        "  parametreler: " + parametre_json(kaldirma_parametreleri(is_["id"])),
-        "geri alma: /offpeak-kur ile yeniden kur.",
+        _metin.t("kurulum.kaldirma.baslik", dil, id=is_["id"], ad=is_["name"]),
+        _metin.t("kurulum.kaldirma.satir", dil, zamanlama=is_["schedule_display"],
+                 state=is_["state"] or "?",
+                 durum=_metin.t("kurulum.liste.etkin" if is_["enabled"]
+                                else "kurulum.liste.duraklatilmis", dil)),
+        _metin.t("kurulum.kaldirma.parametreler", dil, json=parametre_json(kaldirma_parametreleri(is_["id"]))),
+        _metin.t("kurulum.kaldir_enj.geri_alma", dil),
     ])

@@ -58,7 +58,8 @@ export const ORTAK_AYAR_ANAHTARLARI = [
   'pencere_sn',
   'kota_penceresi_sn',
   'kota_tavani',
-  'olcum_dosyasi'
+  'olcum_dosyasi',
+  'dil'
 ]
 
 /** Yalnız masaüstü yarısına özel ayarlar (çekirdek/backend karşılığı yok). */
@@ -96,7 +97,8 @@ export const AYAR_TIPLERI = {
   pencere_sn: 'ondalik',
   kota_penceresi_sn: 'ondalik',
   kota_tavani: 'tam',
-  olcum_dosyasi: 'metin'
+  olcum_dosyasi: 'metin',
+  dil: 'metin'
 }
 
 /** py `_bool` ile aynı doğru kümesi (kalan her şey yanlış sayılır). */

@@ -22,45 +22,31 @@
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
 sha: 0581ed7bb13b59836ed6b34c2c166621e7ab5a35
-title: Off-Peak Bekçi
+title: Off-Peak Watch (offpeak-bekci)
 description: >-
-  Ollama Cloud off-peak penceresini görünür kılar: masaüstü durum çubuğu rozeti pencerenin
-  geri sayımını ve kuyrukta onay bekleyen/onaylı iş kalemlerini gösterir (pencere tanımı
-  Ollama'nın off-peak saatleri: hafta içi 18:00-12:00 UTC penceresi, hafta sonu tek blok),
-  pencere başlamadan 30 dakika önce bir kez toast uyarır ve onayı `/offpeak-onayla <id,id>`
-  ile kullanıcıdan alır — onaysız iş koşmaz. Gövde tarafında `llm_execution` middleware'i
-  yalnız Ollama Cloud çağrılarında, yalnız peak penceresinde, son 60 sn'deki çağrı sayısı
-  hedef hızı (varsayılan 6/dk) aştıysa tavanlı kısa bir bekleme uygular; saatlik kota tavanı
-  aşıldığında (varsayılan 120/saat) uyarı kaydı yazar, isteği iptal etmez. Varsayılan
-  `kuru_kosu: true` — eklenti ölçer, geciktirmez; canlıya almak için config.yaml'da
-  `offpeak-bekci.kuru_kosu: false`. `on_session_end` kancası oturum sonunda pencere/kota/
-  kuyruk özetini yerel günlüğe yazar.
-  Kurulum opt-in'dir: `/offpeak-kur` kurulacak cron işini TAM gösterir (iş adı, zamanlama,
-  promptun tamamı, monitör, workdir, araç kümeleri, teslim) ve `plan_hash` ister; onay
-  hash'e bağlıdır ve yalnız kurulum İSTEĞİ oturuma bırakılır — işi ajanın kendi cron aracıyla
-  kurar. Otomatik bırakma host'a bağlıdır (ölçüm: `hermes_cli/plugins_injection.py:18-32`):
-  klasik CLI oturumunda istek ajanın kuyruğuna girer; Ink TUI / masaüstü-panel host'unda
-  çekirdek kalıcı `session_key` ister ve o anahtar komut handler'ına verilmediği için komut
-  kurulacak parametreleri tek satır JSON olarak basar (işi yine ajanın cron aracıyla kurar,
-  isteği kullanıcı ajana verir). Anahtarı okumanın tek yolu özel çekirdek modülü
-  `gateway.session_context`ten geçer (kural 9 → kullanılmaz); gateway'e enjeksiyon ayrıca
-  `plugins.entries.offpeak-bekci.allow_gateway_injection: true` ister (varsayılan kapalı).
-  `/offpeak-kaldir` kurulu işleri listeler, `onayla <job_id>`
-  ile kaldırma isteğini bırakır (id · zamanlama · durum · sonraki koşu); host sınırı aynıdır.
-  Prova `duraklat` ile yapılır (`paused:true`).
-  Disclosure — ağ çağrısı yok, telemetri yok, sır okumaz/yazmaz, kabuk/süreç çalıştırmaz,
-  uzaktan kod indirmez, kendi kendini güncellemez. Eklenti cron deposuna (`jobs.json`)
-  HİÇBİR koşulda yazmaz, yalnız salt-okur (yol genel yüzeyden türetilir; dizin açan `load_jobs()`
-  kullanılmaz). Okuduğu yerel dosyalar: `kuyruk_dosyasi` ayarının gösterdiği defter
-  (varsayılan `~/.hermes/offpeak-bekci/kuyruk.md`) ve cron deposu. Yazdığı yerler:
-  `olcum_dosyasi` (JSONL ölçüm/uyarı, varsayılan `~/.hermes/offpeak-bekci/olcum.jsonl`) ve
-  kullanıcı `/offpeak-onayla` verdiğinde yalnız o kuyruk dosyası atomik olarak (dosyanın
-  içeriğini eklenti üretmez, kullanıcının dosyasıdır). Masaüstü tarafı `desktop/plugin.js`
-  yalnız eklenti SDK yüzeyini kullanır (prototip yamalama, eval, DOM sorgulama yok).
+  Makes Ollama Cloud's off-peak window visible and actionable in Hermes: a desktop status-bar
+  chip shows the countdown and the queue item counts (Ollama off-peak hours: weekdays 18:00-12:00
+  UTC, weekends one block), a one-shot notice fires 30 minutes before the window opens, and
+  approval is taken only from the user (`/offpeak-onayla <id,id>`) — work runs only if approved,
+  and items never enter the queue by themselves. `/offpeak-durum` prints a readable report by
+  default (machine-readable JSON with `/offpeak-durum json`), and `/offpeak-kur` prints the cron
+  job it would install in full plus a `plan_hash`; nothing is installed without a hash-bound
+  approval typed by the user, and the plugin never writes the cron store. One `llm_execution`
+  middleware measures the call rate for Ollama Cloud calls during the peak window and ships
+  measure-only (`kuru_kosu: true`): it records what it would delay and never delays. No network
+  calls, no telemetry, no credential reads; the only local files it touches are the queue ledger
+  and its own JSONL measurement log. Output language is English by default; `dil: tr` selects
+  Turkish. Auto-delivery is host-dependent: in a classic CLI session the request enters the
+  agent queue; on the Ink TUI / desktop-panel host the core asks for a persistent `session_key`,
+  which the command handler does not receive, so the command prints the parameters as a single
+  line of JSON. Injecting into a gateway additionally requires
+  `plugins.entries.offpeak-bekci.allow_gateway_injection: true` (default off); the only in-process
+  way to read that key is the private `gateway.session_context` module (rule 9 -> not used).
+  Requires Hermes >= 0.22.2.
 maintainer: onkanat
 tier: community
 category: desktop
-version: "0.1.3"
+version: "0.1.4"
 requires_hermes: ">=0.22.2"
 docs_url: https://github.com/onkanat/hermes-offpeak-bekci#readme
 platforms: []

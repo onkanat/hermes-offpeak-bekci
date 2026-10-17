@@ -3,6 +3,28 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.4] — 2026-10-17
+
+**English-first user-facing text (maintainer review of PR #139797), Turkish selectable.**
+
+- New `metinler.py`: a pure catalog of 103 message keys × {`en`, `tr`} plus `dil_sec(ayar)` and
+  `t(key, dil, **kw)`. Every user-facing string in `__init__.py` (slash-command descriptions and
+  `args_hint`, the `/offpeak-durum` readable report, the outputs of `/offpeak-onayla`,
+  `/offpeak-kur`, `/offpeak-kaldir`, notices and error messages) and in `bekci_kurulum.py` (install
+  plan, warnings, injected request texts, removal report, runner prompt) now goes through it.
+- **English is the default**; set `dil: tr` in `config.yaml` → `offpeak-bekci:` to get the previous
+  Turkish wording back (byte-identical to 0.1.3, verified). `bekci_core.py` declares `dil` in the
+  settings order and schema defaults.
+- `plugin.yaml` description, the catalog entry (`title` / `description`) and `README.md` are
+  English-first; Turkish documentation moved to `README.tr.md`.
+- Machine contracts unchanged: `/offpeak-durum json` keeps the same keys/types/numbers (the only
+  addition is the `dil` key inside the `ayar` block, which `plugin.yaml` already declares). The
+  desktop half passes `dil` through (`ORTAK_AYAR_ANAHTARLARI`, `AYAR_TIPLERI`) and was rebuilt.
+- Gates: 116 Python tests OK · 7/7 desktop tests (+12 core) · `build-desktop --check` OK ·
+  `hermes plugins validate` passed.
+- Note: `plan_hash` differs between an English and a Turkish install plan (the prompt is part of
+  the hashed fields); jobs installed earlier keep working.
+
 ## [0.1.3] — 2026-10-16
 
 **Çalışma zamanı DEĞİŞMEDİ** — bu bir ölçüm/test sürümüdür: `bekci_core.py` (sha256 `5f0c9d0c…`) ve

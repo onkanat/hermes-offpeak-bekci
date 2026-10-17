@@ -1,143 +1,148 @@
 # offpeak-bekci
 
-Ollama Cloud'un **off-peak penceresini görünür kılar**: durum çubuğu rozeti pencerenin geri
-sayımını ve kuyrukta onay bekleyen/onaylı iş kalemlerini gösterir, pencere açılmadan
-`on_bildirim_dk` dakika önce bir kez uyarır, onayı yalnız kullanıcıdan alır. Gövde tarafında
-`llm_execution` middleware'i — yalnız Ollama Cloud çağrılarında ve yalnız peak penceresinde —
-dakikalık çağrı hızını ölçer; `kuru_kosu: true` iken **hesaplar, uyumaz**.
+Makes Ollama Cloud's **off-peak window visible and actionable**: a status-bar chip shows the
+countdown and the queue item counts, a one-shot notice fires `on_bildirim_dk` minutes before the
+window opens, and approval is only ever taken from the user. On the body side an `llm_execution`
+middleware — only for Ollama Cloud calls and only inside the peak window — measures the per-minute
+call rate; with `kuru_kosu: true` (default) it **measures and never sleeps**.
 
-![Rozet](docs/rozet.png)
+![Status-bar chip](docs/rozet.png)
 
-Rozet: pencere/geri sayım · `ONAYLI/TOPLAM` sayaç · kota durumu. (Görsel: gerçek masaüstü
-çubuğundan kırpılmış, ölçüm anına ait; `docs/rozet.png`.)
+Chip: window/countdown · `APPROVED/TOTAL` counter · quota state. (Image cropped from a real desktop
+status bar at measurement time; `docs/rozet.png`.)
 
-## Kurulum — tek satır
+> Turkish documentation: [`README.tr.md`](README.tr.md). Command output is English by default and
+> Turkish when `dil: tr` is set.
+
+## Install — one line
 
 ```bash
 git clone https://github.com/onkanat/hermes-offpeak-bekci && hermes-offpeak-bekci/tools/kur.sh && hermes plugins enable offpeak-bekci
 ```
 
-`tools/kur.sh` repoyu `$HERMES_HOME/plugins/offpeak-bekci` altına kopyalar (idempotent, uzak
-indirme yok), yükleme yüzeyinin sha256'sını basar ve `hermes plugins validate` ile doğrular.
+`tools/kur.sh` copies the repo into `$HERMES_HOME/plugins/offpeak-bekci` (idempotent, no remote
+download), prints the sha256 of the shipped surface and verifies it with `hermes plugins validate`.
 
-Masaüstü yarısı (rozet) ayrı kurulur — tek dosya:
+The desktop half (the chip) is installed separately — a single file:
 
 ```bash
 mkdir -p ~/.hermes/desktop-plugins/offpeak-bekci
 cp desktop/plugin.js ~/.hermes/desktop-plugins/offpeak-bekci/plugin.js
-# sonra: Settings ▸ Plugins'ten açın · ⌘K → "Reload desktop plugins"
+# then: enable it under Settings ▸ Plugins · ⌘K → "Reload desktop plugins"
 ```
 
-Rozet, durumu `/offpeak-durum json` ile okur; bu yüzden sunucu ve masaüstü yarısını **birlikte**
-güncelleyin (aynı sürüm).
-Başka bir profil için: `HERMES_HOME=~/.hermes/profiles/<profil> tools/kur.sh`. Bir değeri
-değiştirmek için **kod düzenlemek gerekmez**: ayar `config.yaml` → `offpeak-bekci:` bloğuna yazılır.
+The chip reads its state through `/offpeak-durum json`, so update the server and desktop halves
+**together** (same version). For another profile: `HERMES_HOME=~/.hermes/profiles/<profile> tools/kur.sh`.
+Changing a value needs **no code edit**: settings live in `config.yaml` → the `offpeak-bekci:` block.
 
-Katalog girdisi (`plugin-catalog/offpeak-bekci.yaml`) **taslak**: PR açılmadı — repo henüz
-herkese açık değil (GitHub 404) ve bu checkout'ta `origin` remote'u yok. Yayınlanıncaya kadar
-yukarıdaki kaynak kurulumu geçerlidir.
+Catalog entry: see `plugin-catalog/offpeak-bekci.yaml` — submitted as PR
+[#139797](https://github.com/NousResearch/hermes-agent/pull/139797) (review in progress). Until it
+is listed, the source install above applies.
 
-## Komutlar
+## Commands
 
-| Komut | Ne yapar |
+| Command | What it does |
 | --- | --- |
-| `/offpeak-durum` | Pencere, geri sayım, kayan pencere hızı, kota ve kuyruk sayacı. **Varsayılan: okunur rapor**; `/offpeak-durum json` makine çıktısı (masaüstü rozeti bunu okur). |
-| `/offpeak-onayla <id,id>` | Kuyruk defterindeki kalemleri `onaylı` yapar (onaylayan **tek** yer kullanıcıdır). |
-| `/offpeak-kur` | Kurulacak off-peak cron işini **tam** gösterir (iş adı, zamanlama, promptun tamamı, monitör, workdir, araç kümeleri, teslim) + `plan_hash`. **Hiçbir şey kurmaz.** |
-| `/offpeak-kur onayla <plan_hash> [duraklat]` | Yalnız `plan_hash` tutuyorsa devam eder; kurulum **isteğini** oturuma bırakır, işi ajanın kendi `cronjob_manage` aracı kurar (host'a bağlı — bkz. *Hangi host'ta otomatik bırakılır?*). |
-| `/offpeak-kaldir` | Bu profildeki offpeak işlerini listeler (id · zamanlama · durum · sonraki koşu). |
-| `/offpeak-kaldir onayla <job_id>` | Yalnız listedeki bir id ile kaldırma **isteğini** oturuma bırakır (host'a bağlı — bkz. *Hangi host'ta otomatik bırakılır?*). |
+| `/offpeak-durum` | Window, countdown, sliding-window rate, quota and queue counters. **Default: readable report**; `/offpeak-durum json` is the machine output (the desktop chip reads that). |
+| `/offpeak-onayla <id,id>` | Marks queue items as `onaylı`/approved (the user is the **only** approver). |
+| `/offpeak-kur` | Prints the off-peak cron job that would be installed **in full** (job name, schedule, the whole prompt, monitor, workdir, toolsets, delivery) plus `plan_hash`. **Installs nothing.** |
+| `/offpeak-kur onayla <plan_hash> [duraklat]` | Continues only if `plan_hash` matches; leaves the install **request** to the session, and the agent's own `cronjob_manage` tool installs it (host-dependent — see *Where is the request auto-delivered?*). |
+| `/offpeak-kaldir` | Lists offpeak jobs in this profile (id · schedule · state · next run). |
+| `/offpeak-kaldir onayla <job_id>` | Leaves a removal **request** to the session, only with an id from that list (host-dependent — see *Where is the request auto-delivered?*). |
 
-Neden "istek"? Eklenti API'sinde cron işi **yaratma** yüzeyi yoktur (`register_command`/hook/
-middleware vardır, iş kurucu yoktur). Kurulum bu yüzden kullanıcı onaylı bir mesajla oturuma
-bırakılır; kararı ve kaydı ajanın cron aracı yapar. **Eklenti `jobs.json`'a hiçbir koşulda
-yazmaz — yalnız okur.**
+Why "request"? The plugin API has no surface to **create** a cron job (`register_command`,
+hooks and middleware exist; a job installer does not). Installation is therefore left to the
+session as a user-approved message; the agent's cron tool makes the decision and the record.
+**The plugin never writes `jobs.json` under any circumstance — it only reads it.**
 
-### Hangi host'ta otomatik bırakılır? (ölçülmüş sınır)
+### Where is the request auto-delivered? (measured limit)
 
-`ctx.inject_message(…)` çağrısını çekirdek host'a göre yönlendirir
+`ctx.inject_message(…)` is routed by the core depending on the host
 (`hermes_cli/plugins_injection.py:18-32`):
 
-| Host | Ne olur |
+| Host | What happens |
 | --- | --- |
-| **Klasik CLI** (terminal REPL — çekirdek burada CLI referansını kurar) | İstek CLI kuyruğuna girer, dönüş `True`; komut bitince ajan kurar. |
-| **Ink TUI (`hermes --tui`) / masaüstü-panel** | Çekirdek **kalıcı `session_key`** ister. O anahtar komut handler'ına verilmez (`PluginContext` üyelerinde oturum alanı yok; `pre_command` kancası masaüstü `command.dispatch` yolunda atılmıyor) → dönüş `False`. |
-| **Gateway oturumu** (`session_key` ya da `origin` eklentiye önceden verilmişse) | İstek o oturuma kuyruklanır — **ama** çekirdek önce kapıyı sorar: `plugins.entries.offpeak-bekci.allow_gateway_injection: true` (varsayılan **kapalı**). Kapalıysa uyarı basılır ve dönüş `False` (`hermes_cli/plugins.py:622-630`). |
+| **Classic CLI** (terminal REPL — the core installs the CLI reference here) | The request enters the CLI queue, return is `True`; the agent installs it when the command finishes. |
+| **Ink TUI (`hermes --tui`) / desktop panel** | The core asks for a **persistent `session_key`**. That key is not given to the command handler (no session field on `PluginContext`; the `pre_command` hook is not invoked on the desktop `command.dispatch` path) → return is `False`. |
+| **Gateway session** (when `session_key` or `origin` was handed to the plugin beforehand) | The request is queued into that session — **but** the core first asks a gate: `plugins.entries.offpeak-bekci.allow_gateway_injection: true` (default **off**). If off, a warning is printed and the return is `False` (`hermes_cli/plugins.py:622-630`). |
 
-Yani masaüstü/Ink host'unda komut "bu kanalda oturuma bırakılamadı" dalına düşer ve kurulacak
-parametreleri **tek satır JSON** olarak basar: iş yine ajanın cron aracıyla kurulur, tek fark isteği
-kullanıcı ajana verir (JSON'u yapıştır ya da `cronjob_manage` ile kur).
+So on the desktop/Ink host the command falls into the "could not be left to the session in this
+channel" branch and prints the parameters to install as **a single line of JSON**: the job is still
+installed through the agent's cron tool, the only difference being that the user passes the request
+to the agent (paste the JSON, or use `cronjob_manage`).
 
-Oturum anahtarını okumanın tek süreç içi yolu `gateway.session_context.get_session_env`; bu modül
-eklenti için **genel yüzey değil**: çekirdeğin kendi denetleyicisi yapay bir
-`from gateway.session_context import get_session_env` importunu bulgu olarak döndürüyor
-(`private_import_findings`), `hermes_constants.get_hermes_home` döndürmüyor. Kural 9 gereği bu yol
-kullanılmaz; yani masaüstünde komut handler'ı anahtara ulaşamaz ve otomatik bırakma çalışmaz
-(çözüm kullanıcı/çekirdek kararı: ya genel bir okuma yüzeyi, ya `allow_gateway_injection` + anahtar).
-Regresyon testleri: `tests/test_kurulum.py::HostKanaliTest` (+ metin tarafı `HostBeyaniTest`).
-Ölçülen: çekirdek kaynağı satırları, çekirdeğin kendi injection testleri ve yürütülmüş sonda.
-Ölçülmeyen: gerçek Hermes.app host teslimi (eklenti tarafı stub yakalar).
+The only in-process way to read the session key is `gateway.session_context.get_session_env`, and
+that module is **not public surface** for a plugin: the core's own checker reports an artificial
+`from gateway.session_context import get_session_env` import as a finding
+(`private_import_findings`), while `hermes_constants.get_hermes_home` does not. Per rule 9 that path
+is not used; hence on the desktop the command handler cannot reach the key and auto-delivery does
+not work (the resolution is a user/core decision: either a public read surface, or
+`allow_gateway_injection` + the key). Regression tests: `tests/test_kurulum.py::HostKanaliTest`
+(plus the wording side, `HostBeyaniTest`). Measured: core source lines, the core's own injection
+tests, and a real probe run. Not measured: the real Hermes.app host delivery (the plugin side
+catches it with a stub).
 
-Prova (işi kurup hemen kaldırmadan denemek):
+Dry run (try the job without keeping it):
 
 ```text
-/offpeak-kur onayla <plan_hash> duraklat     # iş paused:true kurulur, zamanlanmaz
-hermes cron list                             # iş görünür
-/offpeak-kaldir onayla <job_id>              # geri alma
+/offpeak-kur onayla <plan_hash> duraklat     # creates the job with paused:true, never scheduled
+hermes cron list                             # the job is visible
+/offpeak-kaldir onayla <job_id>              # undo
 ```
 
-## Disclosure — ne okur, nereye yazar, ne tutar
+## Disclosure — what it reads, where it writes, what it keeps
 
-**Okur:** yalnız `kuyruk_dosyasi` ayarının gösterdiği tek yerel dosya (varsayılan
-`~/.hermes/offpeak-bekci/kuyruk.md`) — bekleyen/onaylı/koşulmuş kalemleri saymak için. Kurulum
-komutları ayrıca cron deposunu (`<profil>/cron/jobs.json`) **salt okur**; depo yolu **genel
-yüzeyden** türetilir (`hermes_constants.get_hermes_home()`), çekirdeğin özel `cron.jobs` modülü
-**import edilmez** (katalog kural 9). `load_jobs()` bilerek kullanılmaz: o çağrı dizin açan
-`ensure_dirs()` yapar (yan etki).
+**Reads:** only the single local file named by the `kuyruk_dosyasi` setting (default
+`~/.hermes/offpeak-bekci/kuyruk.md`) — to count pending/approved/run items. The install commands
+additionally **read-only** the cron store (`<profile>/cron/jobs.json`); the store path is derived
+from **public surface** (`hermes_constants.get_hermes_home()`), the core's private `cron.jobs`
+module is **not imported** (catalog rule 9). `load_jobs()` is deliberately unused: that call runs
+`ensure_dirs()`, which creates directories (a side effect).
 
-**Yazar:** (1) `olcum_dosyasi` ayarının gösterdiği yerel JSONL günlük (varsayılan
-`~/.hermes/offpeak-bekci/olcum.jsonl`): ölçüm/uyarı/onay kayıtları; (2) kullanıcı
-`/offpeak-onayla` verdiğinde **yalnız** `kuyruk_dosyasi` — dosyanın içeriğini eklenti üretmez,
-kullanıcının kendi dosyasıdır, yazım atomiktir (geçici dosya + `os.replace`). Başka hiçbir yere
-yazmaz; `jobs.json`, `config.yaml` ve site dosyaları yazma kapsamı **dışındadır**.
+**Writes:** (1) the local JSONL log named by the `olcum_dosyasi` setting (default
+`~/.hermes/offpeak-bekci/olcum.jsonl`): measurement/alert/approval records; (2) when the user runs
+`/offpeak-onayla`, **only** `kuyruk_dosyasi` — the plugin does not generate the file's content, it
+is the user's own file, and the write is atomic (temp file + `os.replace`). It writes nowhere else;
+`jobs.json`, `config.yaml` and site files are **out of scope**.
 
-**Tutar (ayar):** aşağıdaki tablo. Tek beyan kaynağı `plugin.yaml` → `config_schema`'dır; kod
-varsayılanı oradan okur. Kurulumun kendi değerleri `config.yaml` → `offpeak-bekci:` bloğunda
-durur; eklentiye kullanıcıya özel hiçbir yol gömülmez.
+**Keeps (settings):** the table below. The single source of truth is `plugin.yaml` →
+`config_schema`; code defaults are read from there. A given install's own values live in
+`config.yaml` → the `offpeak-bekci:` block; no user-specific path is baked into the plugin.
 
-**Yapmaz:** ağ çağrısı yok, telemetri yok, sır/parola/token okumaz-yazmaz, kabuk/süreç
-çalıştırmaz, uzaktan kod indirmez, kendi kendini güncellemez, başka profil/makineye dokunmaz.
-Masaüstü yarısı (`desktop/plugin.js`) yalnız eklenti SDK yüzeyini kullanır: prototip yamalama,
-`eval`, DOM sorgulama yok.
+**Does not:** no network calls, no telemetry, never reads or writes secrets/passwords/tokens, never
+runs a shell or spawns processes, never downloads remote code, never self-updates, never touches
+another profile or machine. The desktop half (`desktop/plugin.js`) uses only the plugin SDK
+surface: no prototype patching, no `eval`, no DOM querying.
 
-## Ayarlar
+## Settings
 
-| Ayar | Varsayılan | Anlamı |
+| Setting | Default | Meaning |
 | --- | --- | --- |
-| `kuru_kosu` | `true` | `true` iken ölçer/kaydeder, **bekleme uygulamaz**. |
-| `kuyruk_dosyasi` | `~/.hermes/offpeak-bekci/kuyruk.md` | Kuyruk defterinin yolu (tek okuma kaynağı). |
-| `schedule` | `5 18 * * 1-5` | Off-peak penceresinin açılışı (cron, UTC) — `/offpeak-kur` planında kullanılır. |
-| `on_bildirim_dk` | `30` | Uyarının pencere öncesi başlangıcı (dk). |
-| `hedef_hiz_dk` | `6` | Peak'te dakikada en fazla kaç çağrı (kayan `pencere_sn` penceresi). |
-| `erteleme_tavani_sn` | `30.0` | Tek istek için en fazla bekleme (gecikme tavanı). |
-| `pencere_sn` | `60.0` | Kayan hız penceresinin uzunluğu (sn). |
-| `kota_tavani` | `120` | Kota penceresinde en fazla çağrı; aşılırsa uyarı kaydı (istek iptal edilmez). |
-| `kota_penceresi_sn` | `3600.0` | Kota sayacının penceresi (sn). |
-| `kota_token_gun` | `0` | Günlük taze token tavanı; `0` = tavan yok. |
-| `cache_read_tavani_gun` | `0` | Günlük cache-read token tavanı; `0` = tavan yok. |
-| `off_peak_only_isler` | `[]` | Yalnız off-peak'te koşması gereken iş adları (beyan). |
-| `olcum_dosyasi` | `~/.hermes/offpeak-bekci/olcum.jsonl` | Ölçüm/uyarı günlüğü (JSONL, yerel). |
+| `dil` | `en` | Language of command descriptions, command output and notices: `en` or `tr`. |
+| `kuru_kosu` | `true` | While `true` it measures/records and **never sleeps**. |
+| `kuyruk_dosyasi` | `~/.hermes/offpeak-bekci/kuyruk.md` | Path of the queue ledger (the single read source). |
+| `schedule` | `5 18 * * 1-5` | Opening of the off-peak window (cron, UTC) — used in the `/offpeak-kur` plan. |
+| `on_bildirim_dk` | `30` | How long before the window the notice starts (minutes). |
+| `hedef_hiz_dk` | `6` | Max calls per minute during peak (sliding `pencere_sn` window). |
+| `erteleme_tavani_sn` | `30.0` | Max sleep for a single request (delay ceiling). |
+| `pencere_sn` | `60.0` | Length of the sliding rate window (seconds). |
+| `kota_tavani` | `120` | Max calls per quota window; exceeding it writes an alert record (the request is not cancelled). |
+| `kota_penceresi_sn` | `3600.0` | Quota counter window (seconds). |
+| `kota_token_gun` | `0` | Daily fresh-token ceiling; `0` = no ceiling. |
+| `cache_read_tavani_gun` | `0` | Daily cache-read token ceiling; `0` = no ceiling. |
+| `off_peak_only_isler` | `[]` | Names of jobs that must only run off-peak (a declaration). |
+| `olcum_dosyasi` | `~/.hermes/offpeak-bekci/olcum.jsonl` | Measurement/alert log (JSONL, local). |
 
-## Geliştirme
+## Development
 
 ```bash
-python3 -m unittest discover -s tests -t .   # python kapıları
-node --test tests/desktop/plugin.test.mjs    # masaüstü kapıları
-node tools/build-desktop.mjs --check         # gömülü plugin.js beyat mı (EXIT=0)
-hermes plugins validate . --install-deps     # manifest doğrulaması
+python3 -m unittest discover -s tests -t .   # python gates
+node --test tests/desktop/plugin.test.mjs    # desktop gates
+node tools/build-desktop.mjs --check         # is the embedded plugin.js stale? (EXIT=0)
+hermes plugins validate . --install-deps     # manifest validation
 ```
 
-Prova/ölçüm araçları: `tools/kuru_kosu_olcum.py` (canlı config ile kuru koşu ölçümü).
+Dry-run/measurement tools: `tools/kuru_kosu_olcum.py` (dry-run measurement against the live config).
 
-Sınır: gerçek kuyruk defterine ölçüm amaçlı **yazılmaz**; kurulum komutları kullanıcı onayı
-olmadan iş kurmaz ve `kuru_kosu` ayarını değiştirmez.
+Limit: it never **writes** to a real queue ledger for measurement purposes; the install commands
+never create a job without user approval and never change the `kuru_kosu` setting.

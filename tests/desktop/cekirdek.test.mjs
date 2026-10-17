@@ -183,9 +183,12 @@ test('koşum kaydı tablosu kalem sayılmaz + kalın/notlu durum okunur', async 
 
 test('ayarlar: tek beyan kaynağı + ortak adlar + eski ad uyumu', () => {
   // Ortak adlar py `bekci_core.VARSAYILAN_AYARLAR` ile aynı küme (tests/test_ayarlar.py eşler).
-  assert.equal(ORTAK_AYAR_ANAHTARLARI.length, 13)
-  assert.ok(ORTAK_AYAR_ANAHTARLARI.includes('on_bildirim_dk'))
-  assert.ok(ORTAK_AYAR_ANAHTARLARI.includes('kuru_kosu'))
+  // Sayı elle tutulmaz: otorite plugin.yaml (config_schema) → py testi onu eşler; burada yalnız
+  // listenin beklenen üyeleri sınanır (17.10.2026: `dil` eklendi → 14).
+  assert.equal(ORTAK_AYAR_ANAHTARLARI.length, 14)
+  for (const ad of ['on_bildirim_dk', 'kuru_kosu', 'kuyruk_dosyasi', 'dil']) {
+    assert.ok(ORTAK_AYAR_ANAHTARLARI.includes(ad), `ortak ayar eksik: ${ad}`)
+  }
 
   // Kullanıcıya özel sabit yol gömülü olamaz; kuyruk defteri genel varsayılana işaret eder.
   const metin = readFileSync(resolve(kok, 'desktop/bekci-cekirdek.js'), 'utf8')

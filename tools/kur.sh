@@ -33,7 +33,7 @@ echo "--- kurulan dosyalar ---"
 find "$HEDEF" -maxdepth 2 -type f | sed "s|$HEDEF/|  |" | sort
 
 echo "--- yükleme yüzeyi (sha256) ---"
-for f in plugin.yaml __init__.py bekci_core.py bekci_kurulum.py; do
+for f in plugin.yaml __init__.py bekci_core.py bekci_kurulum.py metinler.py; do
   printf '  %s  %s\n' "$(shasum -a 256 "$KOK/$f" | cut -d' ' -f1)" "$f"
 done
 

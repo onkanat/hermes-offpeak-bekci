@@ -20,6 +20,12 @@ Davranış özeti:
     onay verdiğinde (``/offpeak-onayla``) yazılır.
   * Ölçüm/günlük yazımı ve gecikme hesabı asla çağrıyı bozmaz: tüm hata yutulur, ``next_call``
     istisnası olduğu gibi yukarı çıkar.
+  * Arayüz dili: kullanıcıya görünen her metin ``metinler`` kataloğundan gelir — **varsayılan
+    İngilizce**, ``dil: tr`` (``plugin.yaml`` → ``config_schema.dil``) ile Türkçe. Makine
+    sözleşmeleri dilden BAĞIMSIZDIR: ``/offpeak-durum json`` anahtarları, kuyruk durum
+    değerleri (``onaylı``/``koşuldu``…), cron argümanları (``onayla``/``duraklat``) ve iş adı
+    (``IS_ADI``) çevrilmez. Türkçe kalanlar bilinçli: kod yorumları/docstring'ler ve
+    ``logger.debug`` tanı satırları (kullanıcı yüzeyi değil, geliştirici günlüğü).
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from . import bekci_core as core
 from . import bekci_kurulum as kurulum
+from . import metinler
 
 logger = logging.getLogger(__name__)
 
@@ -113,14 +120,15 @@ def _kuyruk_yolu(ayar: Dict[str, Any]) -> Path:
 
 
 def _kuyruk_oku(ayar: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], Optional[str]]:
-    """(kalemler, hata) — dosya yoksa kalem listesi boş, hata dolu döner."""
+    """(kalemler, hata) — dosya yoksa kalem listesi boş, hata dolu döner (hata dili `ayar`dan)."""
     yol = _kuyruk_yolu(ayar)
+    dil = metinler.dil_sec(ayar)
     try:
         return core.kuyruk_ayristir(yol.read_text(encoding="utf-8")), None
     except FileNotFoundError:
-        return [], f"dosya yok: {yol}"
+        return [], metinler.t("kuyruk.hata.yok", dil, yol=yol)
     except Exception as exc:
-        return [], f"okunamadı: {exc}"
+        return [], metinler.t("kuyruk.hata.okunamadi", dil, hata=exc)
 
 
 # ── Middleware: llm_execution ─────────────────────────────────────────
@@ -166,7 +174,7 @@ def _gecikme_kapisi(ctx: Any = None) -> Callable[..., Any]:
                     "tavan": kota["tavan"],
                     "pencere_sn": float(ayar["kota_penceresi_sn"]),
                     "kuru_kosu": plan["kuru_kosu"],
-                    "not": "istek iptal edilmedi; yalnız uyarı kaydı",
+                    "not": metinler.t("kayit.kota_uyari.not", metinler.dil_sec(ayar)),
                 }, ayar)
         except Exception as exc:  # ölçüm/gecikme asla çağrıyı bozmaz
             logger.debug("offpeak-bekci: middleware ölçüm hatası (%s)", exc)
@@ -187,15 +195,20 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
         son60 = _sayac.sayi(ts)
         kota_sayi = _kota_sayac.sayi(ts)
     veri: Dict[str, Any] = dict(o)
+    dil = metinler.dil_sec(ayar)
+    ozet = metinler.t(
+        "rapor.ozet", dil,
+        pencere=o["pencere"].upper(), gelecek=o["gelecek_pencere"], geri_sayim=o["geri_sayim"],
+        toplam=sayilar["toplam"], onayli=sayilar["onaylı"], kosuldu=sayilar["koşuldu"],
+    )
+    if sayilar.get("onay_bekleyen"):
+        ozet += metinler.t("rapor.ozet.ek", dil, n=sayilar["onay_bekleyen"])
     veri.update({
         # İnsan/bildirim özeti — YALNIZ doğru sayılar (16.10.2026 düzeltmesi): "N bekliyor" ifadesi
         # `bekleyen` alanından geliyordu ve o alan koşulmuşları da sayıyordu ("4 bekliyor" derken
         # 4 kalem koşulmuştu). Artık toplam/onaylı/koşuldu yazılır, iş bekleyen ayrıca eklenir.
-        "ozet": (
-            f"{o['pencere'].upper()} · {o['gelecek_pencere']} {o['geri_sayim']} sonra · "
-            f"kuyruk {sayilar['toplam']} kalem · {sayilar['onaylı']} onaylı · {sayilar['koşuldu']} koşuldu"
-            + (f" · {sayilar['onay_bekleyen']} onay/sahipsiz bekliyor" if sayilar.get("onay_bekleyen") else "")
-        ),
+        # Metin dili `dil` ayarından gelir; anahtar/tip sözleşmesi aynı kalır.
+        "ozet": ozet,
         "kuyruk": sayilar,
         "kalemler": kalemler,
         "kuru_kosu": bool(ayar["kuru_kosu"]),
@@ -214,14 +227,16 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
     return veri
 
 
-def _durum_metni(d: Dict[str, Any]) -> str:
+def _durum_metni(d: Dict[str, Any], dil: str = metinler.VARSAYILAN_DIL) -> str:
     """İnsan okur özet (markdown) — `/offpeak-durum` varsayılan çıktısı.
 
     Neden ayrı bir yol: eski davranış tek satır JSON'du ve rozet onu makine olarak okur; ama
     kullanıcı komutu kendisi yazdığında ham JSON **okunamıyor** (ölçüm: 16.10.2026, kullanıcı
     bildirdi: "chat alanında rapor çıktı ama ham json hiçbir şey okuyamadım"). Artık:
     varsayılan = bu rapor, makine çıktısı = `/offpeak-durum json` (rozet bu argümanı geçer).
+    Metinler ``dil`` dilinde gelir (varsayılan İngilizce; ``dil: tr`` → Türkçe).
     """
+    dil = metinler.dil_sec(dil)
     k = d.get("kuyruk") or {}
     kota = d.get("kota") or {}
 
@@ -229,40 +244,63 @@ def _durum_metni(d: Dict[str, Any]) -> str:
         s = " ".join(str(x or "").split())
         return s[:n] + ("…" if len(s) > n else "")
 
+    pencere_satiri = metinler.t(
+        "rapor.pencere.temel", dil, pencere=str(d.get("pencere", "")).upper()
+    )
+    if not d.get("peak_mi"):
+        pencere_satiri += metinler.t("rapor.pencere.aktif", dil)
+    pencere_satiri += metinler.t(
+        "rapor.pencere.sonraki", dil,
+        gelecek=d.get("gelecek_pencere"), geri_sayim=d.get("geri_sayim"),
+    )
+
+    kuyruk_satiri = metinler.t(
+        "rapor.kuyruk", dil,
+        toplam=k.get("toplam", 0), onayli=k.get("onaylı", 0), kosuldu=k.get("koşuldu", 0),
+        atlandi=k.get("atlandı", 0), bekleyen=k.get("onay_bekleyen", 0),
+    )
+    if k.get("sahipsiz"):
+        kuyruk_satiri += metinler.t("rapor.kuyruk.sahipsiz", dil, n=k.get("sahipsiz"))
+
     satirlar = [
-        f"**Off-peak bekçisi** — {d.get('ozet', '')}",
+        metinler.t("rapor.baslik", dil, ozet=d.get("ozet", "")),
         "",
-        f"- **pencere**: şu an **{str(d.get('pencere', '')).upper()}**"
-        + (" — off-peak AKTİF" if not d.get("peak_mi") else "")
-        + f" · sonraki {d.get('gelecek_pencere')} **{d.get('geri_sayim')}** sonra",
-        f"- **kuyruk**: {k.get('toplam', 0)} kalem · {k.get('onaylı', 0)} onaylı · "
-        f"{k.get('koşuldu', 0)} koşuldu · {k.get('atlandı', 0)} atlandı · "
-        f"{k.get('onay_bekleyen', 0)} onay bekliyor"
-        + (f" · {k.get('sahipsiz')} sahipsiz" if k.get("sahipsiz") else ""),
-        f"- **kuru koşu**: {'AÇIK (yalnız ölçer, geciktirmez)' if d.get('kuru_kosu') else 'KAPALI (gerçekten erteleyebilir)'}"
-        f" · hedef hız: {d.get('hedef_hiz_dk')} çağrı/dk · erteleme tavanı: {d.get('erteleme_tavani_sn')} sn",
-        f"- **son 60 sn**: {d.get('son_60sn')} LLM çağrısı · kota: {kota.get('sayi')}/{kota.get('tavan')}"
-        f" çağrı ({'UYARI VAR' if kota.get('uyari') else 'uyarı yok'})",
+        pencere_satiri,
+        kuyruk_satiri,
+        metinler.t(
+            "rapor.kuru", dil,
+            durum=metinler.t("rapor.kuru.acik" if d.get("kuru_kosu") else "rapor.kuru.kapali", dil),
+            hiz=d.get("hedef_hiz_dk"), tavan=d.get("erteleme_tavani_sn"),
+        ),
+        metinler.t(
+            "rapor.son60", dil,
+            sayi=d.get("son_60sn"), kota=kota.get("sayi"), tavan=kota.get("tavan"),
+            uyari=metinler.t("rapor.uyari.var" if kota.get("uyari") else "rapor.uyari.yok", dil),
+        ),
     ]
 
     kalemler = d.get("kalemler") or []
     bekleyen = [x for x in kalemler if str(x.get("durum") or "") not in ("", "koşuldu", "atlandı")]
     if bekleyen:
-        satirlar.append("- **onay/iş bekleyenler**: " + " · ".join(
-            f"`{x.get('id')}` {_kisa(x.get('metin'), 40)}" for x in bekleyen[:5]))
+        satirlar.append(metinler.t(
+            "rapor.bekleyenler", dil,
+            liste=" · ".join(f"`{x.get('id')}` {_kisa(x.get('metin'), 40)}" for x in bekleyen[:5]),
+        ))
         if len(bekleyen) > 5:
-            satirlar.append(f"  … ve {len(bekleyen) - 5} tane daha")
+            satirlar.append(metinler.t("rapor.bekleyenler.devam", dil, n=len(bekleyen) - 5))
     elif kalemler:
-        satirlar.append("- **onay bekleyen**: yok (tüm kalemler koşuldu/atlandı)")
+        satirlar.append(metinler.t("rapor.bekleyen.yok", dil))
 
     yol = d.get("kuyruk_dosyasi")
     if d.get("kuyruk_dosyasi_var"):
-        satirlar.append(f"- **kuyruk defteri**: `{yol}` ✓")
+        satirlar.append(metinler.t("rapor.defter.ok", dil, yol=yol))
     else:
-        satirlar.append(f"- **kuyruk defteri**: `{yol}` ✗ OKUNAMADI — {_kisa(d.get('kuyruk_hata'), 90)}")
+        satirlar.append(metinler.t(
+            "rapor.defter.hata", dil, yol=yol, hata=_kisa(d.get("kuyruk_hata"), 90)
+        ))
 
     satirlar.append("")
-    satirlar.append("_makine çıktısı (rozet/otomasyon): `/offpeak-durum json`_")
+    satirlar.append(metinler.t("rapor.makine", dil))
     return "\n".join(satirlar)
 
 
@@ -275,7 +313,8 @@ def _komut_durum(ctx: Any = None) -> Callable[..., str]:
         if str(raw_args or "").strip().lower().startswith("json"):
             return json.dumps(d, ensure_ascii=False)
 
-        return _durum_metni(d)
+        # Dil canlı ayardan okunur (TTL): `dil` değişince çıktı en geç `_AYAR_TTL_SN` sonra döner.
+        return _durum_metni(d, metinler.dil_sec(_ayarlar(ctx)))
 
     return offpeak_durum
 
@@ -285,36 +324,36 @@ def _komut_onayla(ctx: Any = None) -> Callable[..., str]:
 
     def offpeak_onayla(raw_args: str = "") -> str:
         ayar = _ayarlar(ctx)
+        dil = metinler.dil_sec(ayar)
         yol = _kuyruk_yolu(ayar)
         idler = core.id_listesi_coz(raw_args)
         if not idler:
             kalemler, _hata = _kuyruk_oku(ayar)
             bekleyen = [k["id"] for k in kalemler if k.get("durum") != core.ONAYLI]
-            return (
-                "kullanım: /offpeak-onayla <id,id>\n"
-                f"kuyruk: {yol}\n"
-                f"onay bekleyen: {', '.join(bekleyen) if bekleyen else '(yok)'}"
+            return metinler.t(
+                "onayla.kullanim", dil, yol=yol,
+                idler=", ".join(bekleyen) if bekleyen else metinler.t("onayla.bos", dil),
             )
         try:
             metin = yol.read_text(encoding="utf-8")
         except FileNotFoundError:
-            return f"kuyruk dosyası yok: {yol} — içeriğini eklenti yazmaz, sen oluştur."
+            return metinler.t("onayla.dosya_yok", dil, yol=yol)
         except Exception as exc:
-            return f"kuyruk okunamadı: {yol} ({exc})"
+            return metinler.t("onayla.okunamadi", dil, yol=yol, hata=exc)
         yeni, degisen = core.kuyruk_onayla(metin, idler)
         if not degisen:
-            return f"değişen kalem yok (zaten onaylı ya da bulunamadı): {', '.join(idler)}"
+            return metinler.t("onayla.degisen_yok", dil, idler=", ".join(idler))
         gecici = yol.with_name(yol.name + ".tmp")
         try:
             gecici.write_text(yeni, encoding="utf-8")
             os.replace(gecici, yol)  # atomik: yarım dosya bırakmaz
         except Exception as exc:
-            return f"kuyruk yazılamadı: {yol} ({exc})"
+            return metinler.t("onayla.yazilamadi", dil, yol=yol, hata=exc)
         kalan = core.kuyruk_sayilari(core.kuyruk_ayristir(yeni))
         _kaydet({"tur": "onay", "idler": degisen, "kalan": kalan}, ayar)
-        return (
-            f"onaylandı ({len(degisen)}): {', '.join(degisen)} · "
-            f"kuyruk {kalan['bekleyen']} bekliyor / {kalan['onaylı']} onaylı"
+        return metinler.t(
+            "onayla.basarili", dil, n=len(degisen), idler=", ".join(degisen),
+            bekleyen=kalan["bekleyen"], onayli=kalan["onaylı"],
         )
 
     return offpeak_onayla
@@ -344,23 +383,24 @@ def _cron_dosyasi() -> Path:
     return _profil_evi() / "cron" / "jobs.json"
 
 
-def _kurulum_isleri_oku() -> Tuple[List[Dict[str, Any]], Optional[str]]:
+def _kurulum_isleri_oku(dil: str = metinler.VARSAYILAN_DIL) -> Tuple[List[Dict[str, Any]], Optional[str]]:
     """Kurulu cron işlerini **salt okur**.
 
     ``cron.jobs.load_jobs()`` bilerek kullanılmaz: o çağrı ``ensure_dirs()`` ile dizin açar
     (yan etki). Eklenti yalnız deposu okur; (işler, hata) döner — dosya yoksa hata None'dur
-    ("kurulu iş yok" demektir).
+    ("kurulu iş yok" demektir). Hata metni ``dil`` dilinde gelir (varsayılan İngilizce).
     """
     yol = _cron_dosyasi()
+    dil = metinler.dil_sec(dil)
     try:
         veri = json.loads(yol.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return [], None
     except Exception as exc:
-        return [], f"cron deposu okunamadı: {yol} ({exc})"
+        return [], metinler.t("kaldir.cron.okunamadi", dil, yol=yol, hata=exc)
     isler = veri.get("jobs") if isinstance(veri, dict) else veri
     if not isinstance(isler, list):
-        return [], f"cron deposu beklenmeyen biçimde: {yol}"
+        return [], metinler.t("kaldir.cron.bicim", dil, yol=yol)
     return [i for i in isler if isinstance(i, dict)], None
 
 
@@ -401,31 +441,21 @@ def _komut_kur(ctx: Any = None) -> Callable[..., str]:
 
     def offpeak_kur(raw_args: str = "") -> str:
         plan, ayar = _kur_verisi(ctx)
+        dil = metinler.dil_sec(ayar)
         parcalar = str(raw_args or "").split()
         if not parcalar or parcalar[0] in {"plan", "goster", "göster"}:
-            return kurulum.kurulum_bildirimi(plan)
+            return kurulum.kurulum_bildirimi(plan, dil=dil)
         if parcalar[0] != "onayla":
-            return (
-                f"bilinmeyen argüman: {parcalar[0]}\n"
-                f"kullanım: {kurulum.ONAY_ORNEK}\nplanı göster: /offpeak-kur"
-            )
+            return metinler.t("kur.bilinmeyen", dil, arg=parcalar[0], ornek=kurulum.ONAY_ORNEK)
         ozet = kurulum.plan_hash(plan)
         if len(parcalar) < 2:
-            return (
-                f"kullanım: {kurulum.ONAY_ORNEK}\n"
-                f"plan_hash: {ozet}\n"
-                "onay planın kendi hash'ini ister (yanlışlıkla kurulumu önler)."
-            )
+            return metinler.t("kur.hash_kullanimi", dil, ornek=kurulum.ONAY_ORNEK, ozet=ozet)
         verilen = parcalar[1].strip().lower()
         if verilen != ozet:
-            return (
-                "ONAY REDDEDİLDİ — plan hash'i tutmuyor, hiçbir şey kurulmadı.\n"
-                f"  verilen    : {verilen}\n  plan_hash  : {ozet}\n"
-                "plan bu arada değişmiş olabilir (ayar/kuyruk yolu): `/offpeak-kur` ile yeniden bak."
-            )
+            return metinler.t("kur.reddedildi", dil, verilen=verilen, ozet=ozet)
         duraklat = any(p in {"duraklat", "duraklatılmış", "duraklatilmis", "paused"} for p in parcalar[2:])
-        parametreler = kurulum.cronjob_parametreleri(plan, paused=duraklat)
-        metin = kurulum.enjeksiyon_metni(plan, parametreler, paused=duraklat)
+        parametreler = kurulum.cronjob_parametreleri(plan, paused=duraklat, dil=dil)
+        metin = kurulum.enjeksiyon_metni(plan, parametreler, paused=duraklat, dil=dil)
         birakildi = _oturuma_birak(ctx, metin)
         _kaydet({
             "tur": "kur_onay",
@@ -435,19 +465,18 @@ def _komut_kur(ctx: Any = None) -> Callable[..., str]:
             "kuyruk": plan["kuyruk"],
             "duraklat": duraklat,
             "oturuma_birakildi": birakildi,
-            "kurulum_eklenti_degil": "işi ajanın cron aracı kurar",
+            "kurulum_eklenti_degil": metinler.t("kayit.kurulum_eklenti_degil", dil),
         }, ayar)
         baslik = (
-            f"ONAY ALINDI (plan {ozet}{' · duraklatılmış' if duraklat else ''}) — kurulum isteği "
-            "oturuma bırakıldı; işi ajanın cron aracı kurar (eklenti jobs.json'a yazmaz)."
+            metinler.t("kur.onay_alindi", dil, ozet=ozet,
+                       ek=metinler.t("kur.duraklat.ek", dil) if duraklat else "")
             if birakildi else
-            f"ONAY ALINDI (plan {ozet}) — bu kanalda oturuma bırakılamadı; aşağıdaki parametreyi "
-            "ajana ver ya da `cronjob_manage` ile kendin kur."
+            metinler.t("kur.onay_alindi_kanal_yok", dil, ozet=ozet)
         )
         return "\n".join([
             baslik,
-            "kurulacak iş (tek satır JSON): " + kurulum.parametre_json(parametreler),
-            kurulum.GERI_ALMA,
+            metinler.t("kur.is_satiri", dil) + kurulum.parametre_json(parametreler),
+            metinler.t("kurulum.geri_alma", dil),
         ])
 
     return offpeak_kur
@@ -462,33 +491,27 @@ def _komut_kaldir(ctx: Any = None) -> Callable[..., str]:
     """
 
     def offpeak_kaldir(raw_args: str = "") -> str:
-        isler, hata = _kurulum_isleri_oku()
+        dil = metinler.dil_sec(_ayarlar(ctx))
+        isler, hata = _kurulum_isleri_oku(dil)
         if hata:
-            return f"{hata}\nhiçbir şey kaldırılmadı (eklenti cron deposuna yazmaz)."
+            return metinler.t("kaldir.depo_hata", dil, hata=hata)
         bulunan = kurulum.kurulu_isleri_bul(isler)
         parcalar = str(raw_args or "").split()
         if not parcalar or parcalar[0] in {"liste", "listele", "durum"}:
-            return kurulum.kurulu_listesi(bulunan)
+            return kurulum.kurulu_listesi(bulunan, dil=dil)
         if parcalar[0] != "onayla":
-            return (
-                f"bilinmeyen argüman: {parcalar[0]}\n"
-                "kullanım: /offpeak-kaldir onayla <job_id> · liste için: /offpeak-kaldir\n\n"
-                + kurulum.kurulu_listesi(bulunan)
-            )
+            return metinler.t("kaldir.bilinmeyen", dil, arg=parcalar[0],
+                              liste=kurulum.kurulu_listesi(bulunan, dil=dil))
         if len(parcalar) < 2:
-            return (
-                "kullanım: /offpeak-kaldir onayla <job_id>\n\n" + kurulum.kurulu_listesi(bulunan)
-            )
+            return metinler.t("kaldir.kullanim", dil,
+                              liste=kurulum.kurulu_listesi(bulunan, dil=dil))
         hedef = parcalar[1].strip()
         eslesen = [i for i in bulunan if i["id"] == hedef]
         if not eslesen:
-            return (
-                f"bu id bu profilde bir offpeak işi değil: {hedef} — hiçbir şey kaldırılmadı.\n"
-                "kaldırma yalnız aşağıdaki listedeki id'lerle yapılır.\n\n"
-                + kurulum.kurulu_listesi(bulunan)
-            )
+            return metinler.t("kaldir.farkli_is", dil, hedef=hedef,
+                              liste=kurulum.kurulu_listesi(bulunan, dil=dil))
         is_ = eslesen[0]
-        metin = kurulum.kaldirma_enjeksiyon_metni(is_)
+        metin = kurulum.kaldirma_enjeksiyon_metni(is_, dil=dil)
         birakildi = _oturuma_birak(ctx, metin)
         _kaydet({
             "tur": "kaldir_onay",
@@ -497,11 +520,11 @@ def _komut_kaldir(ctx: Any = None) -> Callable[..., str]:
             "oturuma_birakildi": birakildi,
         }, _ayarlar(ctx))
         baslik = (
-            "KALDIRMA ONAYI — istek oturuma bırakıldı; işi ajanın cron aracı kaldırır."
+            metinler.t("kaldir.onay", dil)
             if birakildi else
-            "KALDIRMA ONAYI — bu kanalda oturuma bırakılamadı; aşağıdaki parametreyi ajana ver."
+            metinler.t("kaldir.onay_kanal_yok", dil)
         )
-        return "\n".join([baslik, kurulum.kaldirma_bildirimi(is_)])
+        return "\n".join([baslik, kurulum.kaldirma_bildirimi(is_, dil=dil)])
 
     return offpeak_kaldir
 
@@ -531,36 +554,37 @@ def _oturum_sonu(
 
 # ── Kayıt ─────────────────────────────────────────────────────────────
 def register(ctx: Any) -> None:
-    """PluginContext kayıtları — ``plugin.yaml`` beyanıyla birebir."""
+    """PluginContext kayıtları — ``plugin.yaml`` beyanıyla birebir.
+
+    Beyan metinleri (açıklama + ``args_hint``) ``metinler`` kataloğundan gelir ve **yükleme
+    anındaki** ``dil`` ayarına göre yazılır (komut çıktıları ise canlı ayarı izler); dil
+    değişince arayüz beyanları için eklentinin yeniden yüklenmesi gerekir — diğer manifest
+    yüzeyleriyle aynı sınır.
+    """
+    dil = metinler.dil_sec(_ayarlar(ctx))
     ctx.register_middleware("llm_execution", _gecikme_kapisi(ctx))
     ctx.register_command(
         "offpeak-durum",
         handler=_komut_durum(ctx),
-        description="Ollama off-peak penceresi, geri sayım, kota ve kuyruk durumu (okunur rapor; `json` ile makine çıktısı).",
-        args_hint="[json]",
+        description=metinler.t("komut.durum.aciklama", dil),
+        args_hint=metinler.t("komut.durum.ipucu", dil),
     )
     ctx.register_command(
         "offpeak-onayla",
         handler=_komut_onayla(ctx),
-        description="Off-peak kuyruğundaki iş kalemlerini onaylı yapar (kullanıcı onayı).",
-        args_hint="<id,id>",
+        description=metinler.t("komut.onayla.aciklama", dil),
+        args_hint=metinler.t("komut.onayla.ipucu", dil),
     )
     ctx.register_command(
         "offpeak-kur",
         handler=_komut_kur(ctx),
-        description=(
-            "Opt-in off-peak cron işinin planını gösterir; `onayla <plan_hash> [duraklat]` ile "
-            "kurulum isteğini oturuma bırakır (işi ajanın cron aracı kurar)."
-        ),
-        args_hint="[onayla <plan_hash> [duraklat]]",
+        description=metinler.t("komut.kur.aciklama", dil),
+        args_hint=metinler.t("komut.kur.ipucu", dil),
     )
     ctx.register_command(
         "offpeak-kaldir",
         handler=_komut_kaldir(ctx),
-        description=(
-            "Kurulu offpeak cron işlerini listeler; `onayla <job_id>` ile kaldırma isteğini "
-            "oturuma bırakır (işi ajanın cron aracı kaldırır)."
-        ),
-        args_hint="[onayla <job_id>]",
+        description=metinler.t("komut.kaldir.aciklama", dil),
+        args_hint=metinler.t("komut.kaldir.ipucu", dil),
     )
     ctx.register_hook("on_session_end", _oturum_sonu)

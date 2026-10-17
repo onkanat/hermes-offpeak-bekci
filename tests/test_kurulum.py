@@ -122,8 +122,10 @@ class CekirdekKanal:
 class KurulumOrtami:
     """Tmp profil evi + ayar + kayıt tutucu; komut koşuları için ortak kurulum."""
 
-    def __init__(self, monitor: bool = True, kuyruk: bool = True, isler: list | None = None):
+    def __init__(self, monitor: bool = True, kuyruk: bool = True, isler: list | None = None,
+                 dil: str = "en"):
         self.yigin = tempfile.TemporaryDirectory()
+        self.dil = dil
         self.kok = Path(self.yigin.name)
         self.ev = self.kok / "profil"
         self.defter = self.kok / "kuyruk.md"
@@ -137,7 +139,7 @@ class KurulumOrtami:
         self.isler = list(isler or [])
         if isler is not None:
             self.cron_yaz()
-        self.ayar = _ayar_uret(self.kok, kuyruk_dosyasi=str(self.defter))
+        self.ayar = _ayar_uret(self.kok, kuyruk_dosyasi=str(self.defter), dil=dil)
         self.kayitlar: list = []
         self.baglam = SahteBaglam(self.ayar)
         self._yigin = contextlib.ExitStack()
@@ -207,15 +209,15 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(plan["varyant"], kur.VARYANT_ACILIS)
         self.assertEqual(plan["monitor"], "")
         self.assertEqual(plan["zamanlama"], self.ayar["schedule"])
-        self.assertTrue(any("monitör" in u for u in plan["uyarilar"]))
+        self.assertTrue(any("monitor" in u.lower() for u in plan["uyarilar"]))
         # monitörsüz iş 5 dakikalık poll'a DÜŞMEZ: her tik ajan koşumu olurdu (maliyet tuzağı).
         self.assertNotEqual(plan["zamanlama"], kur.POLL_ZAMANLAMA)
 
     def test_kuyruk_yoksa_ve_workdir_yoksa_uyarir(self):
         plan = self._plan(monitor_var=True, kuyruk_var=False, workdir="", workdir_var=False)
         uyarilar = " ".join(plan["uyarilar"])
-        self.assertIn("kuyruk defteri yok", uyarilar)
-        self.assertIn("çalışma dizini yok", uyarilar)
+        self.assertIn("queue ledger missing", uyarilar)
+        self.assertIn("workdir missing", uyarilar)
 
     def test_prompt_kuyruk_yolunu_ve_isareti_tasir(self):
         plan = self._plan(monitor_var=True)
@@ -226,7 +228,7 @@ class PlanTest(unittest.TestCase):
             self.assertNotIn(im, plan["prompt"])
 
     def test_modullerde_kisisel_im_yok(self):
-        for dosya in (KOK / "bekci_kurulum.py", KOK / "__init__.py"):
+        for dosya in (KOK / "bekci_kurulum.py", KOK / "__init__.py", KOK / "metinler.py"):
             metin = dosya.read_text(encoding="utf-8")
             for im in KISISEL_IMLER:
                 self.assertNotIn(im, metin, f"{dosya.name} içinde kullanıcıya özel im: {im}")
@@ -276,8 +278,8 @@ class PlanTest(unittest.TestCase):
         plan = self._plan(monitor_var=True, monitor_yolu="/tmp/scripts/offpeak_bekci.py",
                           workdir="/tmp/ornek-profil")
         metin = kur.kurulum_bildirimi(plan)
-        self.assertIn("KURULACAK İŞ", metin)
-        self.assertIn("henüz hiçbir şey kurulmadı", metin)
+        self.assertIn("JOB TO INSTALL", metin)
+        self.assertIn("nothing has been installed yet", metin)
         self.assertIn(plan["is_adi"], metin)
         self.assertIn(plan["kuyruk"], metin)
         self.assertIn(kur.POLL_ZAMANLAMA, metin)
@@ -287,7 +289,7 @@ class PlanTest(unittest.TestCase):
         self.assertIn(f"{ONAY_ISARETI} {kur.plan_hash(plan)}", metin)
         self.assertIn("duraklat", metin)
         self.assertIn("jobs.json", metin)  # açıklama: eklenti yazmaz
-        self.assertIn("geri alma", metin)
+        self.assertIn("undo", metin)        # geri alma yolu
 
     def test_enjeksiyon_metni_kurulacak_isi_ve_geri_almayi_verir(self):
         plan = self._plan(monitor_var=True, workdir="/tmp/ornek-profil")
@@ -295,7 +297,7 @@ class PlanTest(unittest.TestCase):
         metin = kur.enjeksiyon_metni(plan, p)
         self.assertIn(kur.plan_hash(plan), metin)
         self.assertIn("cronjob_manage", metin)
-        self.assertIn("geri alma", metin)
+        self.assertIn("undo", metin)
         # JSON satırı tek başına çözülür ve kurulacak işi birebir verir
         cozulen = json.loads([s for s in metin.splitlines() if s.startswith("{")][0])
         self.assertEqual(cozulen, p)
@@ -318,13 +320,13 @@ class PlanTest(unittest.TestCase):
         self.assertEqual(bulunan[1]["schedule_display"], "5 18 * * 1-5")
 
     def test_kurulu_listesi_bos_ve_dolu(self):
-        self.assertIn("bulunamadı", kur.kurulu_listesi([]))
+        self.assertIn("no installed offpeak job", kur.kurulu_listesi([]))
         bulunan = kur.kurulu_isleri_bul([
             {"id": "a1", "name": kur.IS_ADI, "prompt": kur.ISARET, "schedule_display": "*/5 * * * *",
              "enabled": True, "state": "scheduled", "next_run_at": "2026-10-16T12:00:00+03:00"},
         ])
         metin = kur.kurulu_listesi(bulunan)
-        self.assertIn("henüz hiçbir şey kaldırılmadı", metin)
+        self.assertIn("nothing has been removed yet", metin)
         self.assertIn("a1", metin)
         self.assertIn("2026-10-16T12:00:00+03:00", metin)
         self.assertIn("onayla <job_id>", metin)
@@ -336,7 +338,7 @@ class PlanTest(unittest.TestCase):
                "state": "scheduled"}
         bildirim = kur.kaldirma_bildirimi(is_)
         self.assertIn("a1", bildirim)
-        self.assertIn("geri alma", bildirim)
+        self.assertIn("undo", bildirim)
         enj = kur.kaldirma_enjeksiyon_metni(is_)
         self.assertIn('"action": "remove"', enj)
         self.assertIn("cronjob_manage", enj)
@@ -349,8 +351,8 @@ class KomutTest(unittest.TestCase):
         with KurulumOrtami() as o:
             onceki = o.depo_baytlari()
             cikti = mod._komut_kur(o.baglam)()
-            self.assertIn("KURULACAK İŞ", cikti)
-            self.assertIn("henüz hiçbir şey kurulmadı", cikti)
+            self.assertIn("JOB TO INSTALL", cikti)
+            self.assertIn("nothing has been installed yet", cikti)
             self.assertEqual(o.baglam.birakilanlar, [])  # onaysız oturuma hiçbir şey bırakılmaz
             self.assertEqual(o.depo_baytlari(), onceki)  # depo değişmedi
             self.assertEqual(o.kayitlar, [])
@@ -359,14 +361,14 @@ class KomutTest(unittest.TestCase):
         with KurulumOrtami() as o:
             onceki = o.depo_baytlari()
             cikti = mod._komut_kur(o.baglam)("onayla 00000000")
-            self.assertIn("ONAY REDDEDİLDİ", cikti)
+            self.assertIn("APPROVAL REJECTED", cikti)
             self.assertEqual(o.baglam.birakilanlar, [])
             self.assertEqual(o.depo_baytlari(), onceki)
 
     def test_kur_hash_verilmezse_kullanimi_soyler(self):
         with KurulumOrtami() as o:
             cikti = mod._komut_kur(o.baglam)("onayla")
-            self.assertIn("kullanım", cikti)
+            self.assertIn("usage", cikti)
             self.assertIn(kur.plan_hash(_plan_uret(o)), cikti)
             self.assertEqual(o.baglam.birakilanlar, [])
 
@@ -376,13 +378,13 @@ class KomutTest(unittest.TestCase):
             hash_ = kur.plan_hash(plan)
             onceki = o.depo_baytlari()
             cikti = mod._komut_kur(o.baglam)(f"onayla {hash_}")
-            self.assertIn("ONAY ALINDI", cikti)
-            self.assertIn("oturuma bırakıldı", cikti)
+            self.assertIn("APPROVAL RECEIVED", cikti)
+            self.assertIn("was left to the session", cikti)
             self.assertEqual(len(o.baglam.birakilanlar), 1)
             enj = o.baglam.birakilanlar[0]
             self.assertIn(hash_, enj)
             self.assertIn("cronjob_manage", enj)
-            gonderilen = _etiketli_json(cikti, "kurulacak iş (tek satır JSON):")
+            gonderilen = _etiketli_json(cikti, "job to install (single-line JSON):")
             self.assertEqual(gonderilen, kur.cronjob_parametreleri(plan))
             self.assertEqual(gonderilen["schedule"], plan["zamanlama"])
             self.assertEqual(gonderilen["prompt"], plan["prompt"])
@@ -395,16 +397,17 @@ class KomutTest(unittest.TestCase):
         with KurulumOrtami() as o:
             hash_ = kur.plan_hash(_plan_uret(o))
             cikti = mod._komut_kur(o.baglam)(f"onayla {hash_} duraklat")
-            gonderilen = _etiketli_json(cikti, "kurulacak iş (tek satır JSON):")
+            gonderilen = _etiketli_json(cikti, "job to install (single-line JSON):")
             self.assertIs(gonderilen["paused"], True)
-            self.assertIn("duraklat", cikti)
+            self.assertIn("APPROVAL RECEIVED", cikti.splitlines()[0])
+            self.assertIn("paused", cikti.splitlines()[0])   # başlıkta prova açıkça yazılır
             self.assertEqual(o.depo_baytlari(), None)  # prova hiçbir dosya yaratmaz
 
     def test_kur_oturuma_birakilamazsa_parametreyi_basar(self):
         with KurulumOrtami() as o:
             o.baglam.birakildi = False
             cikti = mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(_plan_uret(o))}")
-            self.assertIn("oturuma bırakılamadı", cikti)
+            self.assertIn("could not be left to the session", cikti)
             self.assertIn("cronjob_manage", cikti)
             self.assertFalse(o.kayitlar[0]["oturuma_birakildi"])
 
@@ -413,8 +416,8 @@ class KomutTest(unittest.TestCase):
             plan = _plan_uret(o)
             self.assertEqual(plan["varyant"], kur.VARYANT_ACILIS)
             cikti = mod._komut_kur(o.baglam)()
-            self.assertIn("UYARILAR", cikti)
-            self.assertIn("monitör betiği bulunamadı", cikti)
+            self.assertIn("WARNINGS", cikti)
+            self.assertIn("monitor script not found", cikti)
 
     def test_kur_monitor_varsa_ve_depo_yoksa_onay_yine_serbest(self):
         with KurulumOrtami(isler=[]) as o:  # jobs.json var ama boş
@@ -422,12 +425,12 @@ class KomutTest(unittest.TestCase):
             self.assertEqual(plan["varyant"], kur.VARYANT_BEKCI)
             self.assertTrue((o.ev / "scripts" / kur.VARSAYILAN_MONITOR).is_file())
             cikti = mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(plan)}")
-            self.assertIn("ONAY ALINDI", cikti)
+            self.assertIn("APPROVAL RECEIVED", cikti)
 
     def test_kaldir_depo_yokken_bos_liste_verir(self):
         with KurulumOrtami() as o:  # jobs.json hiç yok
             cikti = mod._komut_kaldir(o.baglam)()
-            self.assertIn("bulunamadı", cikti)
+            self.assertIn("no installed offpeak job", cikti)
             self.assertEqual(o.baglam.birakilanlar, [])
             self.assertEqual(o.depo_baytlari(), None)
 
@@ -443,9 +446,9 @@ class KomutTest(unittest.TestCase):
             liste = mod._komut_kaldir(o.baglam)()
             self.assertIn("a1", liste)
             self.assertNotIn("z9", liste)  # offpeak işi olmayan iş listelenmez
-            self.assertIn("eklenti işi", liste)
+            self.assertIn("plugin job", liste)
             red = mod._komut_kaldir(o.baglam)("onayla z9")
-            self.assertIn("offpeak işi değil", red)
+            self.assertIn("not an offpeak job", red)
             self.assertEqual(o.baglam.birakilanlar, [])
             self.assertEqual(o.depo_baytlari(), onceki)
 
@@ -455,7 +458,7 @@ class KomutTest(unittest.TestCase):
         with KurulumOrtami(isler=isler) as o:
             onceki = o.depo_baytlari()
             cikti = mod._komut_kaldir(o.baglam)("onayla a1")
-            self.assertIn("KALDIRMA ONAYI", cikti)
+            self.assertIn("REMOVAL APPROVED", cikti)
             self.assertIn('"action": "remove"', cikti)
             self.assertEqual(len(o.baglam.birakilanlar), 1)
             self.assertIn('"job_id": "a1"', o.baglam.birakilanlar[0])
@@ -466,9 +469,36 @@ class KomutTest(unittest.TestCase):
         with KurulumOrtami(isler=[]) as o:
             o.cron_dosyasi.write_text("{bozuk", encoding="utf-8")
             cikti = mod._komut_kaldir(o.baglam)("onayla a1")
-            self.assertIn("okunamadı", cikti)
-            self.assertIn("hiçbir şey kaldırılmadı", cikti)
+            self.assertIn("could not be read", cikti)
+            self.assertIn("nothing was removed", cikti)
             self.assertEqual(o.baglam.birakilanlar, [])
+
+    def test_kur_dil_tr_turkce_cikti_verir(self):
+        """`dil: tr` → `/offpeak-kur` planı, onayı ve komut çıktısı Türkçe kalır (katalog)."""
+        with KurulumOrtami(dil="tr") as o:
+            plan = _plan_uret(o)
+            self.assertEqual(plan["dil"], "tr")
+            cikti = mod._komut_kur(o.baglam)()
+            self.assertIn("KURULACAK İŞ", cikti)
+            self.assertIn("henüz hiçbir şey kurulmadı", cikti)
+            self.assertIn("onayla (kur)", cikti)
+            self.assertIn("iş adı", cikti)
+            hash_ = kur.plan_hash(plan)
+            onay = mod._komut_kur(o.baglam)(f"onayla {hash_}")
+            self.assertIn("ONAY ALINDI", onay)
+            self.assertIn("oturuma bırakıldı", onay)
+            gonderilen = _etiketli_json(onay, "kurulacak iş (tek satır JSON):")
+            self.assertEqual(gonderilen["prompt"], plan["prompt"])
+            self.assertEqual(gonderilen["schedule"], plan["zamanlama"])
+            kaldir = mod._komut_kaldir(o.baglam)()
+            self.assertIn("kurulu offpeak işi bulunamadı", kaldir)
+
+        with KurulumOrtami(monitor=False, dil="tr") as o2:
+            plan2 = _plan_uret(o2)
+            self.assertEqual(plan2["dil"], "tr")
+            self.assertTrue(any("monitör betiği bulunamadı" in u for u in plan2["uyarilar"]),
+                            "monitör uyarısı Türkçe olmalı")
+            self.assertIn("UYARILAR", mod._komut_kur(o2.baglam)())
 
     def test_kayitli_komutlar_ve_beyan(self):
         """Kayıt: 3 komut + middleware + hook; kurulum komutları da listede."""
@@ -484,7 +514,8 @@ class KomutTest(unittest.TestCase):
             def register_hook(self, ad, fn=None):
                 kayitlar.append(("hook", ad))
 
-        mod.register(SahteKayit())
+        with mock.patch.object(mod, "_ayarlar", side_effect=lambda ctx=None: {"dil": "en"}):
+            mod.register(SahteKayit())  # beyan dili kayıt anında okunur (hermetik: en)
         komutlar = [ad for tur, ad in kayitlar if tur == "command"]
         self.assertEqual(komutlar, ["offpeak-durum", "offpeak-onayla", "offpeak-kur", "offpeak-kaldir"])
         self.assertIn(("middleware", "llm_execution"), kayitlar)
@@ -507,7 +538,7 @@ class DepoYoluTest(unittest.TestCase):
         """``cron.*`` özel çekirdek modülleri hiçbir eklenti modülünde import edilmemeli."""
         import ast
 
-        for dosya in ("__init__.py", "bekci_core.py", "bekci_kurulum.py"):
+        for dosya in ("__init__.py", "bekci_core.py", "bekci_kurulum.py", "metinler.py"):
             tree = ast.parse((KOK / dosya).read_text(encoding="utf-8"))
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
@@ -569,14 +600,14 @@ class HostKanaliTest(unittest.TestCase):
             plan = _plan_uret(o)
             onceki = o.depo_baytlari()
             cikti = mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(plan)}")
-            self.assertIn("ONAY ALINDI", cikti)
-            self.assertIn("oturuma bırakıldı", cikti)
-            self.assertNotIn("bu kanalda oturuma bırakılamadı", cikti)
+            self.assertIn("APPROVAL RECEIVED", cikti)
+            self.assertIn("was left to the session", cikti)
+            self.assertNotIn("could not be left to the session", cikti)
             self.assertEqual(len(o.baglam.birakilanlar), 1)
             self.assertIn(kur.plan_hash(plan), o.baglam.birakilanlar[0])
             self.assertIn("cronjob_manage", o.baglam.birakilanlar[0])
             self.assertTrue(o.kayitlar[0]["oturuma_birakildi"])
-            gonderilen = _etiketli_json(cikti, "kurulacak iş (tek satır JSON):")
+            gonderilen = _etiketli_json(cikti, "job to install (single-line JSON):")
             self.assertEqual(gonderilen, kur.cronjob_parametreleri(plan))
             self.assertEqual(o.depo_baytlari(), onceki)
 
@@ -586,12 +617,12 @@ class HostKanaliTest(unittest.TestCase):
             plan = _plan_uret(o)
             onceki = o.depo_baytlari()
             cikti = mod._komut_kur(o.baglam)(f"onayla {kur.plan_hash(plan)}")
-            self.assertIn("bu kanalda oturuma bırakılamadı", cikti)
+            self.assertIn("could not be left to the session", cikti)
             self.assertIn("cronjob_manage", cikti)  # geri alma yolu gösterilir
             self.assertEqual(o.baglam.birakilanlar, [])
             self.assertTrue(o.baglam.uyarilar)  # çekirdek uyarısı basılır
             self.assertFalse(o.kayitlar[0]["oturuma_birakildi"])
-            gonderilen = _etiketli_json(cikti, "kurulacak iş (tek satır JSON):")
+            gonderilen = _etiketli_json(cikti, "job to install (single-line JSON):")
             self.assertEqual(gonderilen["name"], plan["is_adi"])
             self.assertEqual(gonderilen["schedule"], plan["zamanlama"])
             self.assertEqual(o.depo_baytlari(), onceki)  # eklenti jobs.json'a yazmaz
@@ -600,7 +631,7 @@ class HostKanaliTest(unittest.TestCase):
         with KurulumOrtami(isler=self.ISLER) as o:
             o.baglam = CekirdekKanal(host="cli")
             cikti = mod._komut_kaldir(o.baglam)("onayla a1")
-            self.assertIn("KALDIRMA ONAYI — istek oturuma bırakıldı", cikti)
+            self.assertIn("REMOVAL APPROVED — the request was left to the session", cikti)
             self.assertEqual(len(o.baglam.birakilanlar), 1)
             self.assertIn('"job_id": "a1"', o.baglam.birakilanlar[0])
             self.assertTrue(o.kayitlar[0]["oturuma_birakildi"])
@@ -610,7 +641,7 @@ class HostKanaliTest(unittest.TestCase):
             o.baglam = CekirdekKanal(host="masaustu")
             onceki = o.depo_baytlari()
             cikti = mod._komut_kaldir(o.baglam)("onayla a1")
-            self.assertIn("bu kanalda oturuma bırakılamadı", cikti)
+            self.assertIn("could not be left to the session", cikti)
             self.assertIn('"action": "remove"', cikti)
             self.assertEqual(o.baglam.birakilanlar, [])
             self.assertFalse(o.kayitlar[0]["oturuma_birakildi"])
@@ -633,7 +664,10 @@ class HostBeyaniTest(unittest.TestCase):
             with self.subTest(dosya=ad):
                 self.assertIn("session_key", metin, f"{ad}: host sınırı (session_key) yazılmamış")
                 self.assertIn("ink", kucuk, f"{ad}: Ink TUI host'u yazılmamış")
-                self.assertIn("masaüstü", kucuk, f"{ad}: masaüstü host'u yazılmamış")
+                # Beyanlar iki dilli ağaçta yaşar (plugin.yaml yorumları Türkçe kalır,
+                # README + katalog İngilizcedir) → host adı iki yazımdan biriyle geçmeli.
+                self.assertTrue(("masaüstü" in kucuk) or ("desktop" in kucuk),
+                                f"{ad}: masaüstü/desktop host'u yazılmamış")
 
     def test_beyanlar_gateway_kapisini_da_yazar(self):
         """Gateway'e enjeksiyonun opt-in kapısı (`allow_gateway_injection`, varsayılan kapalı)
@@ -649,9 +683,68 @@ class HostBeyaniTest(unittest.TestCase):
 
     def test_readme_host_bolumunu_ve_json_fallbackini_anlatir(self):
         metin = (KOK / "README.md").read_text(encoding="utf-8")
-        self.assertIn("Hangi host'ta otomatik bırakılır?", metin)
-        self.assertIn("bu kanalda oturuma bırakılamadı", metin)
+        # README markdown olarak sarılır: cümle satır sonunda bölünebilir → boşluk normalize edilir.
+        duz = " ".join(metin.split())
+        self.assertIn("Where is the request auto-delivered?", duz)
+        self.assertIn("could not be left to the session in this channel", duz)
         self.assertIn("HostKanaliTest", metin)
+
+
+class DilTest(unittest.TestCase):
+    """Arayüz dili: varsayılan İngilizce, `dil: tr` ile Türkçe (katalog sözleşmesi)."""
+
+    #: Türkçe'ye özgü harfler — İngilizce metinde BULUNMAMALI (gözle bakılmayan kapı).
+    TR_HARF = set("ğüşıöçĞÜŞİÖÇ")
+
+    def test_varsayilan_dil_ingilizce(self):
+        self.assertEqual(mod.metinler.VARSAYILAN_DIL, "en")
+        self.assertEqual(mod.metinler.dil_sec(None), "en")
+        self.assertEqual(mod.metinler.dil_sec({}), "en")
+        self.assertEqual(mod.metinler.dil_sec({"dil": "de"}), "en")   # bilinmeyen → varsayılan
+        self.assertEqual(mod.metinler.dil_sec({"dil": "TR"}), "tr")   # büyük harf toleranslı
+        self.assertEqual(mod.metinler.dil_sec("tr"), "tr")
+
+    def test_katalogta_turkce_harf_kalmayan_ingilizce(self):
+        """Varsayılan (İngilizce) metinlerde Türkçe harf olmamalı; prompt hariç (makine belirteçleri)."""
+        for anahtar in mod.metinler.METINLER:
+            if anahtar == "kurulum.prompt":
+                continue  # prompt `onaylı`/`koşuldu`/`KOSULMAMIŞ` gibi makine belirteçlerini taşır
+            leke = self.TR_HARF & set(mod.metinler.t(anahtar))
+            self.assertFalse(leke, f"{anahtar}: İngilizce metinde Türkçe harf {sorted(leke)}")
+
+    def test_turkce_metinler_katalogdan_ve_turkce(self):
+        for anahtar in ("rapor.baslik", "rapor.kuyruk", "kur.is_satiri", "kurulum.liste.baslik"):
+            tr = mod.metinler.t(anahtar, "tr")
+            self.assertTrue(self.TR_HARF & set(tr) or " " in tr, f"{anahtar}: Türkçe karşılık yok")
+            self.assertNotEqual(tr, mod.metinler.t(anahtar, "en"))
+
+    def test_komut_beyanlari_ingilizce_ve_turkce(self):
+        """`register` beyanları (açıklama + args_hint) seçili dille yazılır."""
+        kayitlar: dict = {}
+
+        class SahteKayit:
+            def register_middleware(self, ad, fn=None):
+                pass
+
+            def register_command(self, ad, handler=None, description="", args_hint=""):
+                kayitlar[ad] = (description, args_hint)
+
+            def register_hook(self, ad, fn=None):
+                pass
+
+        with mock.patch.object(mod, "_ayarlar", side_effect=lambda ctx=None: {"dil": "en"}):
+            mod.register(SahteKayit())
+        self.assertEqual(sorted(kayitlar), ["offpeak-durum", "offpeak-kaldir", "offpeak-kur", "offpeak-onayla"])
+        for ad, (aciklama, ipucu) in kayitlar.items():
+            with self.subTest(komut=ad):
+                self.assertTrue(aciklama.strip(), f"{ad}: açıklama boş")
+                self.assertFalse(self.TR_HARF & set(aciklama), f"{ad}: beyan İngilizce değil")
+                self.assertTrue(ipucu.strip(), f"{ad}: args_hint boş")
+
+        kayitlar.clear()
+        with mock.patch.object(mod, "_ayarlar", side_effect=lambda ctx=None: {"dil": "tr"}):
+            mod.register(SahteKayit())
+        self.assertTrue(self.TR_HARF & set(kayitlar["offpeak-durum"][0]), "dil: tr beyanı Türkçe olmalı")
 
 
 if __name__ == "__main__":
