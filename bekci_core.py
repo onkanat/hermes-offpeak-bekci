@@ -654,10 +654,14 @@ def kuyruk_ayristir(metin: str) -> List[Dict[str, Any]]:
 
 
 def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
-    """``{"bekleyen": n, "onaylı": n, "toplam": n, …}``.
+    """``{"onaylı": n, …, "toplam": n}`` sayaçları.
 
-    ``bekleyen`` geriye uyumluluk için "onaysız" anlamındadır; ``beklemede`` yalnız
-    durumu ``bekliyor`` olanları sayar, diğer durumlar kendi adlarıyla gelir.
+    **Bölüşüm (partition):** her kalem tam bir kovada —
+    ``onaylı + beklemede + koşuldu + atlandı + sahipsiz == toplam``.
+    **Kesişen (alt küme):** ``onaysiz`` = onaylı olmayan her kalem (``koşuldu``yu da içerir); bölüşüme girmez.
+    ``onay_bekleyen`` = gerçekten iş bekleyen (onay bekleyen + sahipsiz) — insan metni BUNU kullanır.
+    ``bekleyen`` = ``onaysiz`` ile aynı değerin ESKİ adıdır (geriye uyumluluk); insan metninde kullanılmaz
+    (ölçüldü 16.10.2026: "kuyruk 4 bekliyor" yazıyordu ama 4 kalem KOŞULMUŞTU).
     """
     kalem_listesi = list(kalemler or [])
     sayim = {ONAYLI: 0, BEKLIYOR: 0, KOSULDU: 0, ATLANDI: 0, SAHIPSIZ: 0}
@@ -668,17 +672,19 @@ def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
     toplam = len(kalem_listesi)
     kosuldu = sayim[KOSULDU]
     atlandi = sayim[ATLANDI]
+    onaysiz = toplam - onayli
     return {
-        # `bekleyen` = ONAYSIZ kalem sayısı (geriye uyumluluk). Koşulmuşları da içerir → insan metninde
-        # KULLANILMAZ (ölçüldü 16.10.2026: "kuyruk 4 bekliyor" yazıyordu ama 4 kalem KOŞULMUŞTU).
-        "bekleyen": toplam - onayli,
         "onaylı": onayli,
         "beklemede": sayim[BEKLIYOR],
-        # Gerçekten iş bekleyen (onay bekleyen veya sahipsiz): toplam − onaylı − koşuldu − atlandı
-        "onay_bekleyen": toplam - onayli - kosuldu - atlandi,
         "koşuldu": kosuldu,
         "atlandı": atlandi,
         "sahipsiz": sayim[SAHIPSIZ],
+        # Kesişen sayaç: onaylı olmayan her kalem (koşuldu dahil) — bölüşüme GİRMEZ.
+        "onaysiz": onaysiz,
+        # Gerçekten iş bekleyen (onay bekleyen veya sahipsiz): toplam − onaylı − koşuldu − atlandı
+        "onay_bekleyen": toplam - onayli - kosuldu - atlandi,
+        # DEPRECATED: `onaysiz`ın eski adı; geriye uyumluluk için durur, insan metninde kullanılmaz.
+        "bekleyen": onaysiz,
         "toplam": toplam,
     }
 

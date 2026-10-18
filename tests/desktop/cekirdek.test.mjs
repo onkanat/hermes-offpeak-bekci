@@ -144,8 +144,12 @@ test('kuyruk tablosu: kalem satırı sayılır, başlık/ayraç/ölçüm satır�
   assert.deepEqual(kalemler.map(k => k.durum), ['bekliyor', 'onaylı', 'bekliyor', 'bekliyor'])
   assert.equal(kalemler[2].efor, 'e-2')
   assert.deepEqual(kuyrukSayilari(kalemler), {
-    bekleyen: 3, onaylı: 1, beklemede: 3, 'koşuldu': 0, 'atlandı': 0, sahipsiz: 0, toplam: 4
+    bekleyen: 3, onaylı: 1, beklemede: 3, 'koşuldu': 0, 'atlandı': 0, sahipsiz: 0,
+    onaysiz: 3, onay_bekleyen: 3, toplam: 4
   })
+  // Bölüşüm: her kalem tam bir kovada
+  const s4 = kuyrukSayilari(kalemler)
+  assert.equal(s4['onaylı'] + s4.beklemede + s4['koşuldu'] + s4['atlandı'] + s4.sahipsiz, s4.toplam)
   assert.equal(kalemAyristir('| id | durum |'), null, 'başlık satırı kalem değil')
   assert.equal(kalemAyristir('|---|---|'), null, 'ayraç satırı kalem değil')
 })
@@ -173,8 +177,15 @@ test('koşum kaydı tablosu kalem sayılmaz + kalın/notlu durum okunur', async 
   // `bekleyen` = "onaysız" (geriye uyumlu tanım, bkz. bekci_core.kuyruk_sayilari);
   // `koşuldu` kalem de onaysız sayılır → 2. Yalnız durumu `bekliyor` olanlar `beklemede`dir.
   assert.deepEqual(kuyrukSayilari(kalemler), {
-    bekleyen: 2, onaylı: 0, beklemede: 1, 'koşuldu': 1, 'atlandı': 0, sahipsiz: 0, toplam: 2
+    bekleyen: 2, onaylı: 0, beklemede: 1, 'koşuldu': 1, 'atlandı': 0, sahipsiz: 0,
+    onaysiz: 2, onay_bekleyen: 1, toplam: 2
   })
+  // Bölüşüm kuralı: onaylı + beklemede + koşuldu + atlandı + sahipsiz === toplam
+  const s2 = kuyrukSayilari(kalemler)
+  assert.equal(s2['onaylı'] + s2.beklemede + s2['koşuldu'] + s2['atlandı'] + s2.sahipsiz, s2.toplam)
+  // onaysiz kesişen sayaçtır (koşuldu dahil); onay_bekleyen gerçek bekleyendir
+  assert.equal(s2.onaysiz, 2)
+  assert.equal(s2.onay_bekleyen, 1)
 
   // onaylama yalnız durum sözcüğünü değiştirir: kalın işaret ve ek not korunur
   assert.equal(durumHucreYaz(' **onay-bekliyor** (kullanıcı, 08:05) '), ' **onaylı** (kullanıcı, 08:05) ')

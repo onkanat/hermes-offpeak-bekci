@@ -3,6 +3,17 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.6] — 2026-10-18
+
+**Queue counters are a partition again — the overlapping `bekleyen` is now an explicit subset.**
+
+- `kuyruk_sayilari` / `kuyrukSayilari`: `onaylı + beklemede + koşuldu + atlandı + sahipsiz == toplam` (testli).
+- New explicit subset counter `onaysiz` (every item that is not approved, `koşuldu` included).
+- `bekleyen` kept as a DEPRECATED alias of `onaysiz` for backward compatibility; human text must not use it.
+- Desktop badge now renders `onay_bekleyen` (real pending = awaiting approval + ownerless), falling back to
+  the old field on older backends. "queue 11 pending" no longer appears when all 11 were already run.
+- Regression guard: `test_sayilar_bolusum` (Python) and partition asserts in `tests/desktop/cekirdek.test.mjs`.
+
 ## [0.1.5] — 2026-10-18
 
 **The desktop chip now follows the `dil` setting.**

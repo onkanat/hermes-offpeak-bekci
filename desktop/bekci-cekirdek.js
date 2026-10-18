@@ -657,19 +657,31 @@ export function kuyrukAyristir(metin) {
   return kalemler
 }
 
-/** `{bekleyen, onaylı, beklemede, koşuldu, atlandı, sahipsiz, toplam}` (Python ile aynı). */
+/**
+ * `{onaylı, beklemede, koşuldu, atlandı, sahipsiz, onaysiz, onay_bekleyen, bekleyen, toplam}` (Python ile aynı).
+ *
+ * Bölüşüm: `onaylı + beklemede + koşuldu + atlandı + sahipsiz === toplam`.
+ * `onaysiz` kesişen sayaçtır (onaylı olmayan her kalem, koşuldu dahil) — bölüşüme girmez.
+ * `bekleyen` = `onaysiz`ın eski adı (geriye uyumluluk); rozet metni `onay_bekleyen` kullanır.
+ */
 export function kuyrukSayilari(kalemler) {
   const liste = Array.isArray(kalemler) ? kalemler : []
   const onayli = liste.filter(k => k?.durum === ONAYLI).length
   const beklemede = liste.filter(k => k?.durum === BEKLIYOR).length
+  const kosuldu = liste.filter(k => k?.durum === 'koşuldu').length
+  const atlandi = liste.filter(k => k?.durum === 'atlandı').length
+  const sahipsiz = liste.filter(k => k?.durum === 'sahipsiz').length
+  const onaysiz = liste.length - onayli
 
   return {
-    bekleyen: liste.length - onayli,
-    onaylı: onayli,
+    'onaylı': onayli,
     beklemede,
-    'koşuldu': liste.filter(k => k?.durum === 'koşuldu').length,
-    'atlandı': liste.filter(k => k?.durum === 'atlandı').length,
-    sahipsiz: liste.filter(k => k?.durum === 'sahipsiz').length,
+    'koşuldu': kosuldu,
+    'atlandı': atlandi,
+    sahipsiz,
+    onaysiz,
+    onay_bekleyen: liste.length - onayli - kosuldu - atlandi,
+    bekleyen: onaysiz, // DEPRECATED alias
     toplam: liste.length
   }
 }
@@ -682,7 +694,8 @@ export function rozetParcalari(o, sayilar) {
   return {
     pencere: o.pencere,
     geri_sayim: o.geri_sayim,
-    bekleyen: sayilar?.bekleyen ?? 0,
+    // Gerçekten iş bekleyen (onaysiz DEĞİL): onay bekleyen + sahipsiz. Eski eklentide alan yoksa `bekleyen`e düşer.
+    bekleyen: sayilar?.onay_bekleyen ?? sayilar?.bekleyen ?? 0,
     onaylı: sayilar?.onaylı ?? 0,
     t30_icerisinde: !!o.t30_icerisinde
   }

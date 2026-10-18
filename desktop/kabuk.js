@@ -99,7 +99,7 @@ export function yanitCoz(yanit) {
     return null
   }
 
-  return { bekleyen: bulunan.bekleyen ?? 0, onaylı: bulunan['onaylı'] ?? 0, toplam: bulunan.toplam }
+  return { bekleyen: bulunan.onay_bekleyen ?? bulunan.bekleyen ?? 0, onaylı: bulunan['onaylı'] ?? 0, toplam: bulunan.toplam }
 }
 
 /** Aynı yanıttan backend'in beyan ettiği ETKİN ayarları çıkarır (yoksa null).

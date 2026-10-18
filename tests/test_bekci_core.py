@@ -197,6 +197,21 @@ class KuyrukTest(unittest.TestCase):
         s = c.kuyruk_sayilari(c.kuyruk_ayristir(TABLO))
         self.assertEqual((s["toplam"], s["onaylı"], s["bekleyen"], s["beklemede"]), (4, 1, 3, 3))
 
+    def test_sayilar_bolusum(self):
+        """Bölüşüm kuralı: onaylı + beklemede + koşuldu + atlandı + sahipsiz == toplam.
+
+        `onaysiz` kesişen sayaçtır (koşuldu dahil) ve bölüşüme girmez; `bekleyen` onun eski adıdır.
+        "11+11=22 ama toplam 11" sınıfı hata bu testle kapalıdır (18.10.2026).
+        """
+        kalemler = c.kuyruk_ayristir(TABLO)
+        s = c.kuyruk_sayilari(kalemler)
+        self.assertEqual(
+            s["onaylı"] + s["beklemede"] + s["koşuldu"] + s["atlandı"] + s["sahipsiz"], s["toplam"]
+        )
+        self.assertEqual(s["onaysiz"], s["toplam"] - s["onaylı"])
+        self.assertEqual(s["bekleyen"], s["onaysiz"])  # geriye uyumlu alias
+        self.assertEqual(s["onay_bekleyen"], s["beklemede"] + s["sahipsiz"] + (s["toplam"] - (s["onaylı"] + s["beklemede"] + s["koşuldu"] + s["atlandı"] + s["sahipsiz"])))
+
     def test_onayla_bayt_korur_ve_tekil(self):
         yeni, degisen = c.kuyruk_onayla(TABLO, ["K-001"])
         self.assertEqual(degisen, ["K-001"])
