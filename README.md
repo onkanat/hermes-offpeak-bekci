@@ -1,10 +1,29 @@
 # offpeak-bekci
 
+[![Hermes](https://img.shields.io/badge/hermes-%E2%89%A50.22.2-6E56CF?logo=opensourceinitiative&logoColor=white)](https://hermes-agent.nousresearch.com/docs)
+[![Plugin catalog](https://img.shields.io/badge/catalog-listed-2ea44f?logo=github&logoColor=white)](https://github.com/NousResearch/hermes-agent/tree/main/plugin-catalog)
+[![Version](https://img.shields.io/badge/version-0.1.4-blue)](./CHANGELOG.md)
+[![Tests](https://img.shields.io/badge/tests-116%20passing-brightgreen)](./tests)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![Languages](https://img.shields.io/badge/lang-en%20%7C%20tr-lightgrey)](./README.tr.md)
+[![Off-peak only](https://img.shields.io/badge/runs-off--peak%20only-8957e5)](https://ollama.com/pricing)
+[![Measure-only](https://img.shields.io/badge/middleware-measure--only-informational)](./README.md#disclosure--what-it-reads-where-it-writes-what-it-keeps)
+
 Makes Ollama Cloud's **off-peak window visible and actionable**: a status-bar chip shows the
 countdown and the queue item counts, a one-shot notice fires `on_bildirim_dk` minutes before the
 window opens, and approval is only ever taken from the user. On the body side an `llm_execution`
 middleware — only for Ollama Cloud calls and only inside the peak window — measures the per-minute
 call rate; with `kuru_kosu: true` (default) it **measures and never sleeps**.
+
+## Install from the catalog (recommended)
+
+```bash
+hermes plugins install offpeak-bekci     # listed in the official Hermes plugin catalog
+hermes plugins enable offpeak-bekci
+```
+
+The catalog entry pins `0.1.4` (`7b9a1c4…`) and ships the same tree as the source install below.
+Set `dil: tr` under `config.yaml → offpeak-bekci:` for Turkish command output.
 
 ![Status-bar chip](docs/rozet.png)
 
