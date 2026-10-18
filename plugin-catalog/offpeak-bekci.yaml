@@ -21,7 +21,7 @@
 # TEMİZ KLONDA KABUL (atlanmaz): git clone https://github.com/onkanat/hermes-offpeak-bekci /tmp/x && git -C /tmp/x checkout 7b9a1c4abbe3f30b7869c41f35c9056af676d020 && hermes plugins validate /tmp/x --install-deps   → EXIT=0 (16.10.2026: geçti; bağımlılık olmadığı için --install-deps no-op'tur)
 name: offpeak-bekci
 repo: https://github.com/onkanat/hermes-offpeak-bekci
-sha: 7b9a1c4abbe3f30b7869c41f35c9056af676d020
+sha: 4d337604b837dc8554edeea8f0190495fe5759ab
 title: Off-Peak Watch (offpeak-bekci)
 description: >-
   Makes Ollama Cloud's off-peak window visible and actionable in Hermes: a desktop status-bar
