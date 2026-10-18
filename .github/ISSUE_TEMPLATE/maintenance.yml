@@ -1,0 +1,57 @@
+name: Maintenance task
+description: Release, catalog-pin, compatibility or queue-maintenance item (maintainer-facing)
+title: "[maint] "
+labels: ["maintenance"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Maintenance items are tracked like any other work: a task is done only when there is
+        **evidence** (output file, EXIT code, hash, test result) — "done" without proof does not count.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - Release (version bump + gates + CHANGELOG)
+        - Catalog pin refresh (sha/version + clean-clone validate)
+        - Hermes compatibility (validate after a Hermes update)
+        - Queue ledger / monitor maintenance
+        - Documentation (README, README.tr.md, badges)
+        - Test/CI hygiene
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options: ["P1 — user-visible correctness", "P2 — resilience", "P3 — convenience"]
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: What has to be done
+      description: One paragraph; link the relevant file/section.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of done (evidence)
+      description: Which command(s) and which artefacts prove it (test count, EXIT=0, sha256, clean-clone validate).
+      placeholder: |
+        - `python3 -m unittest discover -s tests -t .` → 116 OK
+        - `node tools/build-desktop.mjs --check` → EXIT=0
+        - clean clone of the pin: `hermes plugins validate . --install-deps` → EXIT=0
+    validations:
+      required: true
+  - type: checkboxes
+    id: rules
+    attributes:
+      label: Rules
+      options:
+        - label: No secrets, tokens or private paths are included.
+          required: true
+        - label: Machine contracts stay unchanged (JSON keys/numbers; measure-only default).
+          required: true

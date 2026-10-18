@@ -1,0 +1,81 @@
+name: Bug report
+description: Something in offpeak-bekci does not work as documented
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Do not paste secrets, tokens, API keys or private paths.**
+        Please include the exact commands you ran and their output — "it does not work" cannot be reproduced.
+  - type: input
+    id: plugin_version
+    attributes:
+      label: offpeak-bekci version
+      description: From `hermes plugins list` or `plugin.yaml` (e.g. 0.1.4)
+      placeholder: "0.1.4"
+    validations:
+      required: true
+  - type: input
+    id: hermes_version
+    attributes:
+      label: Hermes version
+      description: Output of `hermes --version`
+      placeholder: "0.22.2"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where does it happen?
+      options:
+        - Desktop chip (status-bar badge)
+        - Slash command output (/offpeak-durum, /offpeak-onayla, /offpeak-kur, /offpeak-kaldir)
+        - Queue ledger parsing
+        - Middleware / rate measurement (llm_execution)
+        - Install / validate
+        - Other (explain below)
+    validations:
+      required: true
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened
+      description: Actual behaviour, with the exact output you saw.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence (commands + output, EXIT codes)
+      description: Paste the commands and their output. Screenshots are fine for the desktop chip.
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I did not include secrets, tokens or private paths.
+          required: true
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: This is about offpeak-bekci (not about Ollama Cloud itself or Hermes core).
+          required: true
