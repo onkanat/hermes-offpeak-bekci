@@ -2,7 +2,7 @@
 
 [![Hermes](https://img.shields.io/badge/hermes-%E2%89%A50.22.2-6E56CF?logo=opensourceinitiative&logoColor=white)](https://hermes-agent.nousresearch.com/docs)
 [![Plugin catalog](https://img.shields.io/badge/catalog-listed-2ea44f?logo=github&logoColor=white)](https://github.com/NousResearch/hermes-agent/tree/main/plugin-catalog)
-[![Version](https://img.shields.io/badge/version-0.1.4-blue)](./CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.1.5-blue)](./CHANGELOG.md)
 [![Tests](https://img.shields.io/badge/tests-116%20passing-brightgreen)](./tests)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
 [![Languages](https://img.shields.io/badge/lang-en%20%7C%20tr-lightgrey)](./README.tr.md)
@@ -22,7 +22,7 @@ hermes plugins install offpeak-bekci     # listed in the official Hermes plugin 
 hermes plugins enable offpeak-bekci
 ```
 
-The catalog entry pins `0.1.4` (`7b9a1c4…`) and ships the same tree as the source install below.
+The catalog entry pins `0.1.5` and ships the same tree as the source install below.
 Set `dil: tr` under `config.yaml → offpeak-bekci:` for Turkish command output.
 
 ![Status-bar chip](docs/rozet.png)

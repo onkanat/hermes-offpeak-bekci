@@ -706,6 +706,36 @@ export function rozetParcalari(o, sayilar) {
   }
 }
 
+/**
+ * Rozet sözcükleri — `dil` ayarının AÇIK karşılığı (en/tr).
+ *
+ * ÖLÇÜLEN SORUN (18.10.2026): rozet metni yalnız uygulama yerel ayarını izliyordu; kullanıcı
+ * `config.yaml → offpeak-bekci.dil: tr` yazsa bile İngilizce uygulamada rozet İngilizce kalıyordu.
+ * Artık `dil` beyan edilmişse rozet o dili kullanır; boş/geçersizse eski davranış (i18n) korunur.
+ */
+export const ROZET_DIZGISI = {
+  en: {
+    rozet: pencere => (pencere === 'peak' ? 'off-peak in' : 'off-peak'),
+    tip: (geri, bekleyen, onayli, kaynak) =>
+      `Next window change in ${geri} · queue ${bekleyen} pending / ${onayli} approved. ${kaynak}`,
+    tiklama: (pencere, geri, bekleyen, onayli) =>
+      `${pencere} · change in ${geri} · queue ${bekleyen} pending / ${onayli} approved`
+  },
+  tr: {
+    rozet: pencere => (pencere === 'peak' ? 'off-peak:' : 'off-peak'),
+    tip: (geri, bekleyen, onayli, kaynak) =>
+      `Pencere değişimine ${geri} · kuyruk ${bekleyen} bekliyor / ${onayli} onaylı. ${kaynak}`,
+    tiklama: (pencere, geri, bekleyen, onayli) =>
+      `${pencere} · değişime ${geri} · kuyruk ${bekleyen} bekliyor / ${onayli} onaylı`
+  }
+}
+
+/** `dil` ayarını 'en' | 'tr' | null (tanınmayan/boş → i18n'e bırak) olarak çözer. */
+export function rozetDilSec(dil) {
+  const k = String(dil ?? '').trim().toLowerCase()
+  return k === 'en' || k === 'tr' ? k : null
+}
+
 // ── /GÖMÜLÜ ÇEKİRDEK ──
 
 /** Başlık çubuğuna da rozet konsun mu?
@@ -917,7 +947,10 @@ async function sayilariTazele() {
 }
 
 function Rozet() {
-  const t = usePluginI18n(ID)
+  const tHam = usePluginI18n(ID)
+  // `dil` açıkça beyan edilmişse (en/tr) rozet o dili kullanır; değilse uygulama yerel ayarı.
+  const dilKod = rozetDilSec(ayar && ayar.dil)
+  const t = dilKod ? (anahtar, ...arg) => ROZET_DIZGISI[dilKod][anahtar](...arg) : tHam
   const d = useValue($durum)
 
   if (!d) {

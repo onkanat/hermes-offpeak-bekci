@@ -226,7 +226,10 @@ async function sayilariTazele() {
 }
 
 function Rozet() {
-  const t = usePluginI18n(ID)
+  const tHam = usePluginI18n(ID)
+  // `dil` açıkça beyan edilmişse (en/tr) rozet o dili kullanır; değilse uygulama yerel ayarı.
+  const dilKod = rozetDilSec(ayar && ayar.dil)
+  const t = dilKod ? (anahtar, ...arg) => ROZET_DIZGISI[dilKod][anahtar](...arg) : tHam
   const d = useValue($durum)
 
   if (!d) {

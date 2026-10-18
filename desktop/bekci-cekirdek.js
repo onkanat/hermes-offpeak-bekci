@@ -687,3 +687,33 @@ export function rozetParcalari(o, sayilar) {
     t30_icerisinde: !!o.t30_icerisinde
   }
 }
+
+/**
+ * Rozet sözcükleri — `dil` ayarının AÇIK karşılığı (en/tr).
+ *
+ * ÖLÇÜLEN SORUN (18.10.2026): rozet metni yalnız uygulama yerel ayarını izliyordu; kullanıcı
+ * `config.yaml → offpeak-bekci.dil: tr` yazsa bile İngilizce uygulamada rozet İngilizce kalıyordu.
+ * Artık `dil` beyan edilmişse rozet o dili kullanır; boş/geçersizse eski davranış (i18n) korunur.
+ */
+export const ROZET_DIZGISI = {
+  en: {
+    rozet: pencere => (pencere === 'peak' ? 'off-peak in' : 'off-peak'),
+    tip: (geri, bekleyen, onayli, kaynak) =>
+      `Next window change in ${geri} · queue ${bekleyen} pending / ${onayli} approved. ${kaynak}`,
+    tiklama: (pencere, geri, bekleyen, onayli) =>
+      `${pencere} · change in ${geri} · queue ${bekleyen} pending / ${onayli} approved`
+  },
+  tr: {
+    rozet: pencere => (pencere === 'peak' ? 'off-peak:' : 'off-peak'),
+    tip: (geri, bekleyen, onayli, kaynak) =>
+      `Pencere değişimine ${geri} · kuyruk ${bekleyen} bekliyor / ${onayli} onaylı. ${kaynak}`,
+    tiklama: (pencere, geri, bekleyen, onayli) =>
+      `${pencere} · değişime ${geri} · kuyruk ${bekleyen} bekliyor / ${onayli} onaylı`
+  }
+}
+
+/** `dil` ayarını 'en' | 'tr' | null (tanınmayan/boş → i18n'e bırak) olarak çözer. */
+export function rozetDilSec(dil) {
+  const k = String(dil ?? '').trim().toLowerCase()
+  return k === 'en' || k === 'tr' ? k : null
+}

@@ -3,6 +3,16 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.5] — 2026-10-18
+
+**The desktop chip now follows the `dil` setting.**
+
+- `config.yaml → offpeak-bekci.dil: tr` renders Turkish badge words even inside an English app; `dil: en`
+  renders English inside a Turkish app; unset keeps the previous behaviour (application locale).
+  Implemented as a pure helper (`rozetDilSec`, `ROZET_DIZGISI`) in the desktop core with
+  `tests/desktop/dil.test.mjs` (3 cases). Suites: 7 + 12 + 3 JS, 116 Python — all green.
+- No machine-contract change: `/offpeak-durum json` keys and numbers are untouched.
+
 ## [0.1.4] — 2026-10-17
 
 **English-first user-facing text (maintainer review of PR #139797), Turkish selectable.**

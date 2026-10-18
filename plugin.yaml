@@ -1,5 +1,5 @@
 name: offpeak-bekci
-version: "0.1.4"
+version: "0.1.5"
 # manifest_version 2 = config_schema (ayar beyanı) alanını taşıyan sürüm.
 manifest_version: 2
 description: >-
