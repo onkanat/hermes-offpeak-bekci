@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Deterministik yayın paketi — herkes aynı sha256'yı üretebilsin.
 #
-# Neden: paketleyici repoda yokken hiç kimse (peer denetimi dahil) tarbol sha'sını yeniden
-# üretemiyor; bu yüzden sha iddiası doğrulanamıyordu (19.10 ölçümü). `gzip -n` dosya adı ve
-# zaman damgasını gzip başlığına yazmaz; `git archive` de ağaç + commit zamanından deterministik
-# tar üretir → aynı commit her makinede aynı baytları verir.
+# SINIR (ölçüldü, 19.10.2026): `git archive | gzip -n` yalnız gzip BAŞLIĞINI sabitler.
+# Tar gövdesi git sürümüne bağlıdır → aynı commit farklı makinelerde FARKLI sha256 verir:
+#   git 2.54.0 (Apple) + gzip 487  → 48aab29f… (145.986 B)
+#   git 2.53.0         + gzip 1.14 → b4c3cbf6… (146.493 B)
+# Bu yüzden bu betik yalnız "aynı araç zincirinde tekrarlanabilir" paket üretir.
+# Makineler arası sabit bayt / kanonik kimlik için: `tools/paketle.py` (normalize tar) ve
+# `git ls-tree -r --full-tree <ref> | sha256sum` (içerik kimliği).
 #
 # Kullanım:
 #   tools/paketle.sh [ref] [cikti]
