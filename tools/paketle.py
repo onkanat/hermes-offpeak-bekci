@@ -14,8 +14,11 @@ git/gzip sürümünden bağımsız.
 İki kimlik:
   1. **İçerik kimliği (kanonik):** `git ls-tree -r --full-tree <ref>` çıktısının sha256'sı.
      Arşiv biçiminden tamamen bağımsızdır; "hangi ağaç" sorusunun cevabı budur.
-  2. **Paket sha256'sı (bilgi):** bu betiğin ürettiği tarbol; aynı betik + aynı Python ile
-     her makinede aynıdır.
+  2. **Paket sha256'sı (bilgi):** bu betiğin ürettiği tarbol. Sınırı dar tut: baytlar
+     **git/gzip sürümünden** bağımsızdır, Python'dan tümüyle değil — `tarfile` USTAR başlıkları
+     Python sürümüne bağlıdır. Ölçülen: 3.9.6 ve 3.11.17 aynı sha'yı verdi (`81b9e013…`),
+     yani 3.8+ ailesinde pratikte sabit; yine de "araç zincirinden bağımsız" değil,
+     "git/gzip'ten bağımsız" demek doğru olan.
 
 Kullanım:
     tools/paketle.py [ref] [cikti]
