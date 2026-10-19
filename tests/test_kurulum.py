@@ -208,7 +208,10 @@ class PlanTest(unittest.TestCase):
         plan = self._plan(monitor_var=False, workdir="/tmp/ornek-profil")
         self.assertEqual(plan["varyant"], kur.VARYANT_ACILIS)
         self.assertEqual(plan["monitor"], "")
-        self.assertEqual(plan["zamanlama"], self.ayar["schedule"])
+        # Pencere beyanı UTC'dir; KURULAN ifade yerel saate çevrilmiş olanıdır (19.10 hatası).
+        self.assertEqual(plan["zamanlama_utc"], self.ayar["schedule"])
+        self.assertTrue(plan["saat_dilimi"])
+        self.assertNotEqual(plan["zamanlama"], self.ayar["schedule"])  # +03'te 18:05 → 21:05
         self.assertTrue(any("monitor" in u.lower() for u in plan["uyarilar"]))
         # monitörsüz iş 5 dakikalık poll'a DÜŞMEZ: her tik ajan koşumu olurdu (maliyet tuzağı).
         self.assertNotEqual(plan["zamanlama"], kur.POLL_ZAMANLAMA)

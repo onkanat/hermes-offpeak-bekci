@@ -140,7 +140,7 @@ surface: no prototype patching, no `eval`, no DOM querying.
 | `dil` | `en` | Language of command descriptions, command output and notices: `en` or `tr`. |
 | `kuru_kosu` | `true` | While `true` it measures/records and **never sleeps**. |
 | `kuyruk_dosyasi` | `~/.hermes/offpeak-bekci/kuyruk.md` | Path of the queue ledger (the single read source). |
-| `schedule` | `5 18 * * 1-5` | Opening of the off-peak window (cron, UTC) — used in the `/offpeak-kur` plan. |
+| `schedule` | `5 18 * * 1-5` | Opening of the off-peak window, **written in UTC**; the `/offpeak-kur` plan converts it to the **local-time** expression the cron scheduler actually reads (18:05 UTC → 21:05 +03). DST regions get a warning; re-run the plan after a transition. |
 | `on_bildirim_dk` | `30` | How long before the window the notice starts (minutes). |
 | `hedef_hiz_dk` | `6` | Max calls per minute during peak (sliding `pencere_sn` window). |
 | `erteleme_tavani_sn` | `30.0` | Max sleep for a single request (delay ceiling). |

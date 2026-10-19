@@ -1,5 +1,5 @@
 name: offpeak-bekci
-version: "0.1.6"
+version: "0.1.7"
 # manifest_version 2 = config_schema (ayar beyanı) alanını taşıyan sürüm.
 manifest_version: 2
 description: >-
@@ -128,9 +128,11 @@ config_schema:
     type: str
     default: "5 18 * * 1-5"
     description: >-
-      Off-peak iş kuyruğunun koşacağı an (cron ifadesi, UTC; 5 alan: dk saat gün ay hafta-günü).
-      Varsayılan 18:05 UTC = 21:05 TR, hafta içi. Eklenti cron deposuna yazmaz; bu beyan
-      `/offpeak-kur` planında kullanılır ve doğrulanır.
+      Off-peak iş kuyruğunun koşacağı an (cron ifadesi, **UTC**; 5 alan: dk saat gün ay hafta-günü).
+      Varsayılan 18:05 UTC = 21:05 TR, hafta içi. Hermes'in cron zamanlayıcısı ifadeyi **yerel**
+      saatle yorumlar (ölçüldü); bu yüzden `/offpeak-kur` planı UTC beyanını yerel karşılığına
+      çevirir (yaz saati farkı dahil, gün kayması varsa hafta-günü de kaydırılır) ve onu kurar.
+      Eklenti cron deposuna yazmaz; bu beyan planda kullanılır ve doğrulanır.
   # Off-peak'e kaç dakika kala hatırlatma (toast) penceresi başlar.
   on_bildirim_dk:
     type: int

@@ -56,6 +56,166 @@ POLL_ZAMANLAMA = "*/5 * * * *"
 #: İşin ajanına verilecek araç kümeleri (kuyruk defteri + kanıt dosyaları + skill).
 VARSAYILAN_TOOLSETLER: Sequence[str] = ("file", "terminal", "skills")
 
+
+def _gun_alani(alan: str) -> Optional[List[int]]:
+    """Cron hafta-günü alanını kümeye çevirir (0/7 = Pazar). Çözülemezse ``None``."""
+    alan = alan.strip()
+    if alan in {"*", "?"}:
+        return list(range(7))
+    kume: set[int] = set()
+    for parca in alan.split(","):
+        parca = parca.strip()
+        if not parca:
+            return None
+        if "-" in parca:
+            a, _, b = parca.partition("-")
+            try:
+                a_i, b_i = int(a), int(b)
+            except ValueError:
+                return None
+            if b_i < a_i:
+                return None
+            kume.update(range(a_i, b_i + 1))
+        else:
+            try:
+                kume.add(int(parca))
+            except ValueError:
+                return None
+    if any(g < 0 or g > 7 for g in kume):
+        return None
+    return sorted({g % 7 for g in kume})
+
+
+def _gun_metni(gunler: Sequence[int]) -> str:
+    """Gün kümesini kompakt cron metnine çevirir (``2-6``, ``1,3``, ``*``)."""
+    kume = sorted({g % 7 for g in gunler})
+    if len(kume) == 7:
+        return "*"
+    parcalar: List[str] = []
+    i = 0
+    while i < len(kume):
+        j = i
+        while j + 1 < len(kume) and kume[j + 1] == kume[j] + 1:
+            j += 1
+        if j - i >= 2:
+            parcalar.append(f"{kume[i]}-{kume[j]}")
+        else:
+            parcalar.extend(str(g) for g in kume[i:j + 1])
+        i = j + 1
+    return ",".join(parcalar)
+
+
+def _sistem_bolge():
+    """Sistem saat dilimini adlı ``ZoneInfo`` olarak döndürür (DST'yi doğru çözmek için).
+
+    ``datetime.now().astimezone().tzinfo`` sabit ofset verir; yaz saati geçişinde kaymayı
+    göremez. Sıra: ``TZ`` ortam değişkeni → ``/etc/localtime`` bağlantısı → sabit ofset (son çare).
+    """
+    import datetime as _dt
+    import os
+    import pathlib
+
+    from zoneinfo import ZoneInfo
+
+    ad = os.environ.get("TZ", "").strip().lstrip(":")
+    if ad:
+        try:
+            return ZoneInfo(ad)
+        except Exception:  # noqa: BLE001
+            pass
+    try:
+        hedef = pathlib.Path("/etc/localtime").resolve()
+        parcalar = hedef.parts
+        if "zoneinfo" in parcalar:
+            anahtar = "/".join(parcalar[parcalar.index("zoneinfo") + 1:])
+            return ZoneInfo(anahtar)
+    except Exception:  # noqa: BLE001
+        pass
+    return _dt.datetime.now().astimezone().tzinfo
+
+
+def yerel_kron(
+    utc_ifade: str,
+    *,
+    tz: Optional[str] = None,
+    simdi: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """UTC hedefli 5 alanlı cron ifadesini **yerel saat** ifadesine çevirir.
+
+    Neden (ölçülmüş hata, 19.10.2026, saha kurulumu): Hermes'in cron zamanlayıcısı ifadeyi **yerel**
+    saatle yorumlar (`0 8 * * 1` → Next run 08:00 +03). Planın varsayılanı `5 18 * * 1-5`
+    "18:05 UTC" diye belgelenmişti; birebir kurulunca iş 18:05 **yerel** = 15:05 UTC'de, yani
+    peak penceresinin (12:00–18:00 UTC) İÇİNDE koşuyordu — eklentinin amacına aykırı.
+
+    Çeviri, hedef UTC anının **bir sonraki gerçekleşmesindeki** yerel karşılığını alır (yaz saati
+    dahil). Gün sınırı aşılırsa hafta-günü alanı da kaydırılır. Çözülemeyen ifade **aynıen** döner
+    ve ``not`` nedeni söyler: sessizce yanlış ifade üretmek, hiç çevirmemekten kötüdür.
+    """
+    import datetime as _dt
+
+    alanlar = str(utc_ifade or "").split()
+    sonuc: Dict[str, Any] = {"ifade": str(utc_ifade or "").strip(), "utc": str(utc_ifade or "").strip(),
+                             "tz": "", "gun_kaymasi": 0, "not": ""}
+    if len(alanlar) != 5:
+        sonuc["not"] = "ifade 5 alanlı değil; yerel karşılık hesaplanmadı"
+        return sonuc
+    try:
+        dk, saat = int(alanlar[0]), int(alanlar[1])
+    except ValueError:
+        # Saat alanı `*`/`*/n` ise ifade her saat başı koşar; yerel/UTC ayrımı pencereyi
+        # kaydırmaz → çeviri gerekmez, uyarı da gerekmez. Dakika alanı `*/n` olsa bile saat
+        # alanı sayısalsa çeviri şarttır (aşağıdaki uyarı doğru kalır).
+        if alanlar[1] == "*" or alanlar[1].startswith("*/"):
+            sonuc["not"] = ""
+            return sonuc
+        sonuc["not"] = "dk/saat alanı sayısal değil (ad/aralık); yerel karşılık hesaplanmadı"
+        return sonuc
+    if not (0 <= dk <= 59 and 0 <= saat <= 23):
+        sonuc["not"] = "dk/saat aralık dışı; yerel karşılık hesaplanmadı"
+        return sonuc
+    gunler = _gun_alani(alanlar[4])
+    if gunler is None:
+        sonuc["not"] = "hafta-günü alanı çözülemedi; yerel karşılık hesaplanmadı"
+        return sonuc
+
+    try:
+        from zoneinfo import ZoneInfo
+
+        bolge = _sistem_bolge() if not tz else ZoneInfo(tz)
+        yerel_ad = bolge
+        simdi_utc = (simdi or _dt.datetime.now(_dt.timezone.utc))
+        if simdi_utc.tzinfo is None:
+            simdi_utc = simdi_utc.replace(tzinfo=_dt.timezone.utc)
+        simdi_utc = simdi_utc.astimezone(_dt.timezone.utc)
+
+        aday = simdi_utc.replace(hour=saat, minute=dk, second=0, microsecond=0)
+        if aday <= simdi_utc:
+            aday += _dt.timedelta(days=1)
+        for _ in range(8):
+            if ((aday.weekday() + 1) % 7) in gunler:  # cron: 0=Pazar, Python: 0=Pazartesi
+                break
+            aday += _dt.timedelta(days=1)
+        yerel = aday.astimezone(bolge)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 — saat dilimi çözülemezse plan kurulmaz, uyarı verir
+        sonuc["not"] = f"saat dilimi çözülemedi ({type(exc).__name__}); yerel karşılık hesaplanmadı"
+        return sonuc
+
+    kayma = (yerel.date() - aday.date()).days
+    yeni_gunler = [(g + kayma) % 7 for g in gunler]
+    sonuc.update({
+        "ifade": f"{yerel.minute} {yerel.hour} * * {_gun_metni(yeni_gunler)}",
+        "tz": str(getattr(yerel_ad, "key", yerel_ad)),
+        "gun_kaymasi": kayma,
+    })
+    try:
+        yaz = aday.replace(month=((aday.month + 5) % 12) + 1)
+        if yaz.astimezone(bolge).utcoffset() != aday.astimezone(bolge).utcoffset():  # type: ignore[arg-type]
+            sonuc["not"] = ("yaz saati bölgesi: ifade bugünkü ofsete göre; DST geçişinde ±1 saat "
+                            "kayar — geçişten sonra `/offpeak-kur` planını yeniden koş")
+    except Exception:  # noqa: BLE001 — yalnız uyarı; çeviri geçerli
+        pass
+    return sonuc
+
 #: Sonuç teslimi: yerel (bildirim yok; koşum kaydı cron geçmişinde kalır).
 VARSAYILAN_TESLIM = "local"
 
@@ -106,9 +266,16 @@ def kurulum_plani(
     (maliyet tuzağı).
     """
     dil = _metin.dil_sec(ayar)
-    zamanlama = POLL_ZAMANLAMA if monitor_var else str(ayar.get("schedule") or "").strip()
+    # Hermes'in cron zamanlayıcısı ifadeyi YEREL saatle yorumlar (ölçüldü, 19.10.2026:
+    # `0 8 * * 1` → Next run 08:00 +03). Bu yüzden pencere beyanı (UTC) kurulacak ifadeye
+    # çevrilir; monitörsüz varyantta iş pencere AÇILIŞINDA (yerel karşılığıyla) koşar.
+    ham_ifade = POLL_ZAMANLAMA if monitor_var else str(ayar.get("schedule") or "").strip()
+    cevrim = yerel_kron(ham_ifade)
+    zamanlama = cevrim["ifade"]
     monitor = VARSAYILAN_MONITOR if monitor_var else ""
     uyarilar: List[str] = []
+    if cevrim["not"] and cevrim["ifade"] != ham_ifade:
+        uyarilar.append(cevrim["not"])
     if not monitor_var:
         uyarilar.append(_metin.t("kurulum.uyari.monitor_yok", dil, monitor=VARSAYILAN_MONITOR))
     if not kuyruk_var:
@@ -119,6 +286,9 @@ def kurulum_plani(
         "varyant": VARYANT_BEKCI if monitor_var else VARYANT_ACILIS,
         "is_adi": IS_ADI,
         "zamanlama": zamanlama,
+        #: Pencere beyanı (UTC) — göstermelik değil: yerel ifadenin kaynağıdır ve denetimde kullanılır.
+        "zamanlama_utc": ham_ifade,
+        "saat_dilimi": str(cevrim["tz"] or ""),
         "pencere_beyani": str(ayar.get("schedule") or ""),
         "monitor": monitor,
         "monitor_yolu": str(monitor_yolu or ""),
@@ -194,6 +364,8 @@ def kurulum_bildirimi(
         _metin.t("kurulum.plan.zamanlama", dil, deger=plan["zamanlama"])
         + (_metin.t("kurulum.plan.monitor_kapili", dil)
            if plan["varyant"] == VARYANT_BEKCI else ""),
+        _metin.t("kurulum.plan.zamanlama_utc", dil, deger=plan.get("zamanlama_utc") or yok),
+        _metin.t("kurulum.plan.saat_dilimi", dil, deger=plan.get("saat_dilimi") or yok),
         _metin.t("kurulum.plan.monitor", dil, deger=plan["monitor"] or yok)
         + (f" ({plan['monitor_yolu']})" if plan["monitor"] and plan.get("monitor_yolu") else ""),
         _metin.t("kurulum.plan.workdir", dil,

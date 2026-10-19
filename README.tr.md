@@ -100,7 +100,7 @@ yalnız eklenti SDK yüzeyini kullanır: prototip yamalama, `eval`, DOM sorgulam
 | `dil` | `en` | Komut açıklamaları, komut çıktıları ve bildirimlerin dili: `en` veya `tr`. |
 | `kuru_kosu` | `true` | `true` iken ölçer/kaydeder, **bekleme uygulamaz**. |
 | `kuyruk_dosyasi` | `~/.hermes/offpeak-bekci/kuyruk.md` | Kuyruk defterinin yolu (tek okuma kaynağı). |
-| `schedule` | `5 18 * * 1-5` | Off-peak penceresinin açılışı (cron, UTC). |
+| `schedule` | `5 18 * * 1-5` | Off-peak penceresinin açılışı, **UTC olarak yazılır**; `/offpeak-kur` planı bunu zamanlayıcının gerçekten okuduğu **yerel saat** ifadesine çevirir (18:05 UTC → 21:05 +03). Yaz saati bölgelerinde uyarı basılır; geçişten sonra planı yeniden koş. |
 | `on_bildirim_dk` | `30` | Uyarının pencere öncesi başlangıcı (dk). |
 | `hedef_hiz_dk` | `6` | Peak'te dakikada en fazla kaç çağrı. |
 | `erteleme_tavani_sn` | `30.0` | Tek istek için en fazla bekleme (gecikme tavanı). |

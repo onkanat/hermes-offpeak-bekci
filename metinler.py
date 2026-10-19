@@ -252,6 +252,8 @@ METINLER: Dict[str, Dict[str, str]] = {
         "tr": "offpeak-bekci — KURULACAK İŞ (henüz hiçbir şey kurulmadı)",
     },
     "kurulum.plan.is_adi": {"en": "  job name        : {deger}", "tr": "  iş adı        : {deger}"},
+    "kurulum.plan.zamanlama_utc": {"en": "  window (UTC)    : {deger}", "tr": "  pencere (UTC) : {deger}"},
+    "kurulum.plan.saat_dilimi": {"en": "  timezone        : {deger}", "tr": "  saat dilimi   : {deger}"},
     "kurulum.plan.zamanlama": {"en": "  schedule        : {deger}", "tr": "  zamanlama     : {deger}"},
     "kurulum.plan.monitor_kapili": {
         "en": "   (monitor-gated poll: the agent does NOT run unless the output changes, 0 tokens)",
