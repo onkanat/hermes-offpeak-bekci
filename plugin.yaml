@@ -52,8 +52,14 @@ python_dependencies: []
 provides_tools: []
 provides_hooks:
   - on_session_end
-provides_middleware:
-  - llm_execution
+# `provides_middleware` ÜST DÜZEYDE TANINMIYOR: stock core (0.22.2) manifest şemasında bu anahtar
+# yok → her yüklemede "unknown manifest field(s) ignored" uyarısı (ölçüldü 19.10.2026). Middleware
+# kaydı kodda (`llm_execution` sarması) yapıldığı için davranış etkilenmiyor. Beyan kaybolmasın diye
+# `hermes:` meta bloğunda tutuluyor (core bu bloğu serbest meta olarak kabul eder); yetkili beyan
+# katalog girdisindedir (`plugin-catalog/offpeak-bekci.yaml` → capabilities.provides_middleware).
+hermes:
+  provides_middleware:
+    - llm_execution
 
 # ── Komutlar ────────────────────────────────────────────────────────────────────────────
 # `/offpeak-durum`   → pencere/geri sayım/kota/kuyruk durumu — **okunur rapor** (varsayılan);
