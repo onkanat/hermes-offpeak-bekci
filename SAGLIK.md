@@ -13,10 +13,10 @@
 | `offpeak-urun-nabiz` | `e000937c` | Pzt 09:00 | etkin | ok |
 | `offpeak-issue-taslak` | `60df8742` | 15 dk | etkin | ok |
 
-> **Tüketici 0 + onaylı 1 (K-043).** `/offpeak-durum` bunu 0.1.8'den itibaren söylüyor ve **24.10 09:2x'te
-> canlı doğrulandı**: `- **queue consumers**: 0/2 enabled — 1 approved item(s) CANNOT run` +
-> `… 1 approved but 0 queue consumers enabled — WON'T RUN`. Kurulum pinli yapıldı
-> (`revision=e566f91…`); `tools/kur.sh` tek başına provenance'ı güncellemez.
+> **24.10 itibarıyla kuyrukta onaylı kalem YOK** (K-043 kullanıcı kararıyla **iptal** → `atlandı`).
+> Uyarı mekanizması 09:2x'te canlı doğrulandı (`1 approved but 0 queue consumers … WON'T RUN`),
+> o vakada kalem varken doğru çalıştı; şimdi onaylı kalem olmadığı için sessiz — beklenen davranış.
+> İki tüketici de kapalı (boşta 5 dk tik harcamasınlar); yeni onaylı kalem gelince açılır.
 
 ## 2. Açık arızalar
 
