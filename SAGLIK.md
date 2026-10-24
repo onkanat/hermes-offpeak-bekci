@@ -13,9 +13,10 @@
 | `offpeak-urun-nabiz` | `e000937c` | Pzt 09:00 | etkin | ok |
 | `offpeak-issue-taslak` | `60df8742` | 15 dk | etkin | ok |
 
-> **Tüketici 0 + onaylı 1 (K-043).** `/offpeak-durum` bunu 0.1.8'den itibaren söylüyor:
-> `1 approved but 0 queue consumers enabled — WON'T RUN`. Kurulu kod 0.1.8; **çalışan gateway hâlâ
-> 0.1.7 modülünü bellekte tutuyor** — uyarı gateway/uygulama yeniden başlatıldıktan sonra görünür.
+> **Tüketici 0 + onaylı 1 (K-043).** `/offpeak-durum` bunu 0.1.8'den itibaren söylüyor ve **24.10 09:2x'te
+> canlı doğrulandı**: `- **queue consumers**: 0/2 enabled — 1 approved item(s) CANNOT run` +
+> `… 1 approved but 0 queue consumers enabled — WON'T RUN`. Kurulum pinli yapıldı
+> (`revision=e566f91…`); `tools/kur.sh` tek başına provenance'ı güncellemez.
 
 ## 2. Açık arızalar
 
@@ -31,7 +32,9 @@
 2. **Canlı yama repoda yoksa sürüm onu siler** — 23.10'da kapıya uygulanan başlık biçimi düzeltmesi yalnız kurulu kopyalardaydı; 24.10'da depoya alındı + testlendi.
 3. **Derlenmiş yapı kaynaktan kopabilir** — `desktop/plugin.js` yayında bayattı; `build-desktop --check` bu kapıyı atlamayı affetmiyor.
 4. **"Kuyruğa aldım" ≠ "koşuyor"** — tüketici sayısı ölçülmeden iddia kurulmaz; artık `/offpeak-durum` sayıyor.
-5. **`enabled=false` gerekçesiz bırakılmamalı** — `disabled_reason` yoksa "neden koşmuyor" cevapsız (çekirdek alanı; plugin kendi notunu yazamaz).
+5. **Kod değişikliği ≠ yüklü kod:** `plugins/.install-metadata.json` `revision` alanı eski pinde kalırsa
+   (`pinned@004e68…`) restart bile eski kodu servis eder; doğru yol `hermes plugins install <repo> --ref <tam-40-hex> --force --enable`.
+6. **`enabled=false` gerekçesiz bırakılmamalı** — `disabled_reason` yoksa "neden koşmuyor" cevapsız (çekirdek alanı; plugin kendi notunu yazamaz).
 
 ## 4. Pencere
 
