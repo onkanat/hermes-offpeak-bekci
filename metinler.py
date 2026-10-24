@@ -78,6 +78,11 @@ METINLER: Dict[str, Dict[str, str]] = {
         "en": " · {n} awaiting approval or unclaimed",
         "tr": " · {n} onay/sahipsiz bekliyor",
     },
+    # Onaylı kalem var ama hiçbir kuyruk tüketicisi etkin değil (issue #3, 23.10.2026).
+    "rapor.ozet.tuketici_yok": {
+        "en": " · {n} approved but 0 queue consumers enabled — WON'T RUN",
+        "tr": " · {n} onaylı ama kuyruk tüketicisi 0 — KOŞMAZ",
+    },
 
     # ── /offpeak-durum insan okur raporu ──────────────────────────────────────────
     "rapor.baslik": {
@@ -100,6 +105,18 @@ METINLER: Dict[str, Dict[str, str]] = {
               "{bekleyen} onay bekliyor",
     },
     "rapor.kuyruk.sahipsiz": {"en": " · {n} unclaimed", "tr": " · {n} sahipsiz"},
+    # Kuyruk tüketicisi satırı (issue #3): koşucu işlerin kaçı etkin.
+    "rapor.tuketici": {
+        "en": "- **queue consumers**: {etkin}/{toplam} enabled",
+        "tr": "- **kuyruk tüketicisi**: {etkin}/{toplam} etkin",
+    },
+    "rapor.tuketici.yok": {
+        "en": "- **queue consumers**: 0/{toplam} enabled — {n} approved item(s) CANNOT run; "
+              "enable one with `hermes cron resume <id>` or run it from a console session",
+        "tr": "- **kuyruk tüketicisi**: 0/{toplam} etkin — {n} onaylı kalem KOŞAMAZ; "
+              "`hermes cron resume <id>` ile birini aç ya da konsol oturumunda koş",
+    },
+
     "rapor.kuru": {
         "en": "- **dry run**: {durum} · target rate: {hiz} calls/min · delay ceiling: {tavan} s",
         "tr": "- **kuru koşu**: {durum} · hedef hız: {hiz} çağrı/dk · erteleme tavanı: {tavan} sn",

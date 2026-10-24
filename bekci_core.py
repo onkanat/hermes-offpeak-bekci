@@ -373,6 +373,10 @@ _KUTU_ISARETI = re.compile(r"^\[( |x|X)\]\s*(.*)$")
 _ID_ALANI = re.compile(r"(?:^|[\s|·;,])(?:id|kimlik)\s*[:=]\s*([^\s|·;,]+)", re.IGNORECASE)
 _DURUM_ALANI = re.compile(r"(?:^|[\s|·;,])(?:durum|status)\s*[:=]\s*([^\s|·;,]+)", re.IGNORECASE)
 _EFOR_ALANI = re.compile(r"(?:^|[\s|·;,])(?:efor|effort)\s*[:=]\s*([^\s|·;,]+)", re.IGNORECASE)
+# Başlık biçimi: `## K-043 — ressam profili (dilim 1) · **onaylı**`
+# Ölçüldü 23.10.2026: onaylı bir kalem bölüm başlığı olarak yazılınca kuyruk sayacı onu
+# görmüyordu (ONAYLI=0) — kalem tabloya düşmediği için canlı kapı yanlış kalıyordu.
+_BASLIK_KALEMI = re.compile(r"^\s{0,3}#{2,6}\s+([A-Za-z]{1,6}-?\d+)\b(.*)$")
 # Tablo biçimi: `| K-001 | iş | sahip | kanıt | onay-bekliyor | pencere |`
 _TABLO_SATIRI = re.compile(r"^\s*\|(.+)\|\s*$")
 _TABLO_AYRAC_HUCRE = re.compile(r"^:?-{2,}:?$")
@@ -603,6 +607,23 @@ def _kalem_ayristir_satir(
     tablo = _tablo_kalemi(satir, no, baslik)
     if tablo:
         return tablo
+    bm = _BASLIK_KALEMI.match(str(satir or ""))
+    if bm:
+        # Başlık biçimi: durum, başlığın kalanında (`· **onaylı**`) aranır.
+        kalan = bm.group(2)
+        durum = None
+        for parca in re.split(r"[·|]", kalan):
+            durum = _durum_onek(parca)
+            if durum:
+                break
+        return {
+            "id": bm.group(1).strip(),
+            "durum": durum or _durum_normallestir(None),
+            "efor": "",
+            "satir_no": no,
+            "metin": f"{bm.group(1)}{kalan}".strip(),
+            "_baslik": True,
+        }
     m = _SATIR_KALEMI.match(str(satir or ""))
     if not m:
         return None
@@ -650,7 +671,20 @@ def kuyruk_ayristir(metin: str) -> List[Dict[str, Any]]:
         kalem = _kalem_ayristir_satir(satir, i, basliklar.get(i))
         if kalem:
             kalemler.append(kalem)
-    return kalemler
+    # Aynı id iki biçimde yazılmış olabilir (bölüm başlığı + tablo satırı): başlık biçimi
+    # yalnız id başka bir biçimde geçmiyorsa kalem sayılır (çift sayım olmasın).
+    taban_idler = {str(k["id"]).strip("`").lower() for k in kalemler if not k.get("_baslik")}
+    tekiller: List[Dict[str, Any]] = []
+    gorulen: set = set()
+    for k in kalemler:
+        anahtar = str(k["id"]).strip("`").lower()
+        if k.get("_baslik") and anahtar in taban_idler:
+            continue
+        if anahtar in gorulen:
+            continue
+        gorulen.add(anahtar)
+        tekiller.append({kk: vv for kk, vv in k.items() if kk != "_baslik"})
+    return tekiller
 
 
 def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
@@ -686,6 +720,51 @@ def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
         # DEPRECATED: `onaysiz`ın eski adı; geriye uyumluluk için durur, insan metninde kullanılmaz.
         "bekleyen": onaysiz,
         "toplam": toplam,
+    }
+
+
+#: Kuyruk tüketicisi desenleri (issue #3). Cron işinin ADI ya da betik adı bu dizgedeki
+#: bir parçayı içeriyorsa o iş "kuyruk tüketicisi" sayılır. Desen listesi ayardan
+#: (`tuketici_desenleri`) değiştirilebilir; buradaki değer varsayılandır.
+TUKETICI_DESENLERI = ("kuyruk-kosusu", "kuyruk_kosusu", "offpeak_agy_kosusu", "offpeak_bekci")
+
+
+def tuketici_sayaci(
+    isler: Optional[Sequence[Any]], desenler: Optional[Sequence[str]] = None
+) -> Dict[str, Any]:
+    """Kuyruk tüketicisi cron işlerini sayar (SAF: yalnız verilen listeyi okur).
+
+    Neden (issue #3): 23.10.2026'da kuyrukta **onaylı** kalem varken iki tüketici de
+    kapalıydı (`enabled: false`) ve hiçbir uyarı çıkmadı; arıza ancak `jobs.json` elle
+    okununca görüldü. Bu sayaç `/offpeak-durum` çıktısına girer ve "onaylı var, tüketici
+    yok → KOŞMAZ" uyarısını üretir.
+
+    Dönen: ``{"etkin": n, "toplam": m, "isler": [{"id","ad","etkin"}…]}``.
+    Desen eşleşmezse ``toplam=0`` — o durumda "tüketici yok" hükmü VERİLMEZ
+    (iş adları kullanıcıya göre değişir; yanlış alarm üretmek körlükten daha pahalıdır).
+    """
+    desen_listesi = tuple(desenler if desenler is not None else TUKETICI_DESENLERI)
+    if not desen_listesi:
+        return {"etkin": 0, "toplam": 0, "isler": []}
+    kayitlar: List[Dict[str, Any]] = []
+    for is_ in isler or []:
+        if not isinstance(is_, dict):
+            continue
+        ad = str(is_.get("name") or "")
+        imza = " ".join(
+            (ad, str(is_.get("script") or ""), str(is_.get("monitor_script") or ""))
+        ).lower()
+        if not any(d and d.lower() in imza for d in desen_listesi):
+            continue
+        kayitlar.append({
+            "id": str(is_.get("id") or ""),
+            "ad": ad,
+            "etkin": bool(is_.get("enabled")),
+        })
+    return {
+        "etkin": sum(1 for k in kayitlar if k["etkin"]),
+        "toplam": len(kayitlar),
+        "isler": kayitlar,
     }
 
 

@@ -203,6 +203,16 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
     )
     if sayilar.get("onay_bekleyen"):
         ozet += metinler.t("rapor.ozet.ek", dil, n=sayilar["onay_bekleyen"])
+    # ── Kuyruk tüketicisi (issue #3) ──────────────────────────────────────────
+    # Ölçüldü 23.10.2026: kuyrukta onaylı kalem varken iki tüketici de `enabled: false`
+    # idi ve hiçbir uyarı çıkmıyordu. Artık durum çıktısı tüketici sayısını taşır; onaylı
+    # kalem var + etkin tüketici 0 ise özete "KOŞMAZ" uyarısı eklenir. Desen eşleşmezse
+    # (toplam=0) hüküm verilmez — yanlış alarm üretmemek için.
+    isler, is_hata = _kurulum_isleri_oku(dil)
+    tuketici = core.tuketici_sayaci(isler)
+    tuketici_uyari = bool(sayilar["onaylı"] and tuketici["toplam"] and not tuketici["etkin"])
+    if tuketici_uyari:
+        ozet += metinler.t("rapor.ozet.tuketici_yok", dil, n=sayilar["onaylı"])
     veri.update({
         # İnsan/bildirim özeti — YALNIZ doğru sayılar (16.10.2026 düzeltmesi): "N bekliyor" ifadesi
         # `bekleyen` alanından geliyordu ve o alan koşulmuşları da sayıyordu ("4 bekliyor" derken
@@ -211,6 +221,11 @@ def _durum_verisi(ctx: Any = None) -> Dict[str, Any]:
         "ozet": ozet,
         "kuyruk": sayilar,
         "kalemler": kalemler,
+        # Tüketici sayacı (issue #3): `etkin`=0 ve `toplam`>0 iken onaylı kalem koşamaz.
+        # Sözleşme gereği yalnız EKLEME: mevcut anahtarlar ve sayılar değişmedi.
+        "tuketici": tuketici,
+        "tuketici_uyari": tuketici_uyari,
+        "tuketici_hata": is_hata,
         "kuru_kosu": bool(ayar["kuru_kosu"]),
         "hedef_hiz_dk": int(ayar["hedef_hiz_dk"]),
         "erteleme_tavani_sn": float(ayar["erteleme_tavani_sn"]),
@@ -261,12 +276,27 @@ def _durum_metni(d: Dict[str, Any], dil: str = metinler.VARSAYILAN_DIL) -> str:
     )
     if k.get("sahipsiz"):
         kuyruk_satiri += metinler.t("rapor.kuyruk.sahipsiz", dil, n=k.get("sahipsiz"))
+    tuk = d.get("tuketici") or {}
+    tuketici_satiri = ""
+    if tuk.get("toplam"):
+        if d.get("tuketici_uyari"):
+            tuketici_satiri = metinler.t(
+                "rapor.tuketici.yok", dil, toplam=tuk.get("toplam", 0), n=k.get("onaylı", 0)
+            )
+        else:
+            tuketici_satiri = metinler.t(
+                "rapor.tuketici", dil, etkin=tuk.get("etkin", 0), toplam=tuk.get("toplam", 0)
+            )
 
     satirlar = [
         metinler.t("rapor.baslik", dil, ozet=d.get("ozet", "")),
         "",
         pencere_satiri,
         kuyruk_satiri,
+    ]
+    if tuketici_satiri:
+        satirlar.append(tuketici_satiri)
+    satirlar += [
         metinler.t(
             "rapor.kuru", dil,
             durum=metinler.t("rapor.kuru.acik" if d.get("kuru_kosu") else "rapor.kuru.kapali", dil),

@@ -3,6 +3,37 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.8] — 2026-10-24
+
+**A queue item written as a section heading is counted again, and `/offpeak-durum` says when an
+approved item cannot run (no queue consumer enabled).**
+
+- **Heading-form queue items (live patch, now in the repo).** On 2026-10-23 an approved item was
+  written as a section heading (`## K-043 — … · **onaylı**`) instead of a table row; the counter read
+  only the table and reported `ONAYLI=0`, so the item would have waited silently. The parser now reads
+  both forms and de-duplicates by lowercase id (same item in both forms counts once). The fix had only
+  existed in the *installed* copies (plugin + profile monitor script) — it would have been lost on the
+  next release; tests: 4 new cases in `tests/test_bekci_core.py`.
+- **Queue-consumer counter (issue #3).** `/offpeak-durum` and `/offpeak-durum json` gain
+  `tuketici: {etkin, toplam, isler}` and `tuketici_uyari`. When approved items exist and **zero**
+  consumer jobs are enabled, the one-line summary ends with
+  `N approved but 0 queue consumers enabled — WON'T RUN` and the human report carries the same line
+  (EN/TR). Measured on 2026-10-23: both consumers were `enabled: false` and nothing warned.
+  No verdict is emitted when no job matches the consumer patterns (`toplam == 0`) — a wrong alarm is
+  worse than a blind one on machines that name their jobs differently. New suite `tests/test_tuketici.py`
+  (10 cases). Additive contract only: existing keys and numbers unchanged.
+- **Catalog mirror re-synced.** `plugin-catalog/offpeak-bekci.yaml` in this repo was still `0.1.5 /
+  4d337604` while `plugin.yaml` said `0.1.7`; the local mirror now matches the released entry.
+- Release gate on this version: 144 Python tests, JS suites, `build-desktop --check`, `plugins validate`.
+
+## [0.1.7] — 2026-10-19
+
+**Install plan was scheduling inside the peak window (local-time conversion of the UTC cron expression).**
+
+- `/offpeak-kur` now converts the declared UTC schedule to local time and prints the zone next to it;
+  the resulting cron expression no longer lands inside the peak window. Pin for the catalog entry.
+- Changelog entry added retroactively on 2026-10-24 (the tag shipped without one).
+
 ## [0.1.6] — 2026-10-18
 
 **Queue counters are a partition again — the overlapping `bekleyen` is now an explicit subset.**

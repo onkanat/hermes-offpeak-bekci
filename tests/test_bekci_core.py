@@ -388,6 +388,52 @@ class SentetikDefterTest(unittest.TestCase):
                 self.assertEqual([k["id"] for k in kalemler],
                                  [f"{onek}-001", f"{onek}-002", f"{onek}-003"])
 
+    # ── Bölüm başlığı biçimi (ölçüldü 23.10.2026) ──────────────────────────────
+    # Onaylı bir kalem tabloya değil **bölüm başlığı** olarak yazılmıştı
+    # (`## K-043 — ressam profili (dilim 1) · **onaylı**`); sayacı yalnız tabloyu okuduğu
+    # için kapı `ONAYLI=0` dedi ve kalem sessizce koşmadı. Bu testler o körlüğü kapatır.
+    BASLIK_BICIMI = (
+        "| id | iş | sahip | kanıt ölçütü | durum | pencere |\n|---|---|---|---|---|---|\n"
+        "| A-001 | iş bir | makine-b | kanıt | **koşuldu** | off-peak |\n"
+        "\n## A-042 — ressam profili (dilim 1) · **onaylı**\n\n"
+        "Gövde metni burada; satırlar kalem sayılmaz.\n"
+    )
+
+    def test_baslik_bicimi_onayli_kalem_sayilir(self):
+        kalemler = c.kuyruk_ayristir(self.BASLIK_BICIMI)
+        self.assertEqual([k["id"] for k in kalemler], ["A-001", "A-042"])
+        self.assertEqual(kalemler[1]["durum"], "onaylı")
+        sayilar = c.kuyruk_sayilari(kalemler)
+        self.assertEqual(sayilar["onaylı"], 1, "başlık biçimi onaylı kalem görünmüyor")
+        self.assertEqual(sayilar["toplam"], 2)
+
+    def test_baslik_bicimi_koşulmamış_sayılır(self):
+        metin = "## A-050 — karar bekleyen iş · **onay-bekliyor**\n"
+        kalemler = c.kuyruk_ayristir(metin)
+        self.assertEqual([k["id"] for k in kalemler], ["A-050"])
+        self.assertEqual(c.kuyruk_sayilari(kalemler)["onay_bekleyen"], 1)
+
+    def test_ayni_id_iki_bicimde_cift_sayilmaz(self):
+        """Aynı id hem tabloda hem başlıkta geçerse kalem BİR kez sayılır (id küçük harfe inilir)."""
+        metin = (
+            "| id | iş | sahip | kanıt ölçütü | durum | pencere |\n|---|---|---|---|---|---|\n"
+            "| A-007 | iş yedi | makine-b | kanıt | **onaylı** | off-peak |\n"
+            "\n## a-007 — aynı kalem başlık olarak · **onaylı**\n"
+        )
+        kalemler = c.kuyruk_ayristir(metin)
+        self.assertEqual(len(kalemler), 1, f"çift sayım: {[k['id'] for k in kalemler]}")
+        self.assertEqual(c.kuyruk_sayilari(kalemler)["onaylı"], 1)
+
+    def test_baslik_bicimi_gercek_defterle_ayni_sonucu_verir(self):
+        """Gerçek defter varsa: başlık biçimli kalem sayaca girer, kimlikler yinelenmez."""
+        gercek = Path.home() / "MacAir" / "off-peak-kuyruk.md"
+        if not gercek.is_file():
+            self.skipTest("gerçek defter bu makinede yok")
+        kalemler = c.kuyruk_ayristir(gercek.read_text(encoding="utf-8"))
+        kimlikler = [k["id"].lower() for k in kalemler]
+        self.assertEqual(len(kimlikler), len(set(kimlikler)), "yinelenen kimlik")
+
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
