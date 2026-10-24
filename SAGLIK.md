@@ -1,6 +1,6 @@
 # Off-peak sağlık durumu
 
-> Ölçüm: **24.10.2026 08:40 (+03) / 05:40 UTC** — pencere **AÇIK** (Cmt; sonraki peak Pzt 15:00).
+> Ölçüm: **24.10.2026 09:05 (+03) / 06:05 UTC** — pencere **AÇIK** (Cmt; sonraki peak Pzt 15:00).
 > Bu sayfa elle güncellenir; ölçüm komutları §5'te. Tam bakım kanıtı: `~/MacAir/urunler/offpeak-bekci/kanit/bakim-20261024.md`.
 
 ## 1. Zamanlanmış işler
@@ -13,16 +13,17 @@
 | `offpeak-urun-nabiz` | `e000937c` | Pzt 09:00 | etkin | ok |
 | `offpeak-issue-taslak` | `60df8742` | 15 dk | etkin | ok |
 
-> **Tüketici 0 + onaylı 1 (K-043).** `/offpeak-durum` bunu artık söylüyor:
-> `1 approved but 0 queue consumers enabled — WON'T RUN` (0.1.8 ile gelir; kurulu 0.1.7'de yok).
+> **Tüketici 0 + onaylı 1 (K-043).** `/offpeak-durum` bunu 0.1.8'den itibaren söylüyor:
+> `1 approved but 0 queue consumers enabled — WON'T RUN`. Kurulu kod 0.1.8; **çalışan gateway hâlâ
+> 0.1.7 modülünü bellekte tutuyor** — uyarı gateway/uygulama yeniden başlatıldıktan sonra görünür.
 
 ## 2. Açık arızalar
 
 | # | Arıza | Durum (24.10) |
 |---|---|---|
-| **#1** | Başarısız cron koşumunda bildirim yok | **kök neden ölçüldü**: `697ca1d4` 22.10 21:05 → 23.10 22:10 arası **146 kez failed**, `cron_incidents.alerted_at` **NULL** — işin teslim kanalı `deliver: local` (`cron/scheduler.py:3141` erken dönüş). Düzeltme kanal ayarı; **onay bekliyor** |
-| **#2** | Cron, bash betiğini Python gibi koşuyordu | yerel yama `cadbridge_gece.py` (subprocess bash) — 23.10 sonrası 62/62 completed. **Kalıcı çözüm çekirdekte** (`cron/scheduler_script.py:318` hâlâ `runpy.run_path`); upstream taslak hazır, dış yazım onayda |
-| **#3** | Tüketici kapalıyken onaylı kalem sessizce bekliyor | **kısmen kapandı**: `/offpeak-durum` tüketici sayacı + uyarı (0.1.8). `disabled_reason` alanı çekirdekte yok — upstream işi |
+| **#1** | Başarısız cron koşumunda bildirim yok | **KAPANDI 24.10**: kök neden `deliver: local` + boş `failure_deliver` (146 `failed`, `alerted_at` NULL). Düzeltme: `697ca1d4` + `147cdf1d` → `failure_deliver: bot-chat`. Sahte işle doğrulandı: 3. ardışık düşüşte `bot-chat` kuyruğa girdi |
+| **#2** | Cron, bash betiğini Python gibi koşuyordu | **KAPANDI 24.10** (teşhis düzeltmesiyle): çekirdek `.sh` hedefini zaten bash ile koşuyor (`cron/scheduler_script.py:_script_argv`); `runpy` **bizim sarmalayıcımızdaydı** (`cadbridge_gece.py`). Sarmalayıcı `subprocess.run(["bash", …])`; 23.10 sonrası 62/62 completed |
+| **#3** | Tüketici kapalıyken onaylı kalem sessizce bekliyor | **KAPANDI 24.10** (plugin tarafı): `/offpeak-durum` tüketici sayacı + "WON'T RUN" uyarısı (0.1.8). `disabled_reason` alanı çekirdekte yok — upstream işi olarak not edildi |
 
 ## 3. Dersler
 
