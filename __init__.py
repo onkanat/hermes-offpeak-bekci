@@ -136,9 +136,19 @@ def _gecikme_kapisi(ctx: Any = None) -> Callable[..., Any]:
     """``llm_execution`` middleware'i üretir (kayıt sırasında ctx'i kapatır)."""
 
     def llm_execution_gecikme(request: Any, next_call: Callable[[Any], Any], **kw: Any) -> Any:
+        # next_call TEK KEZ çağrılır. Ölçüldü (29.10.2026, masaüstü hatası): bulut olmayan dal
+        # next_call'ı try İÇİNDE çağırıyordu; sağlayıcı hatası except'e düşünce alttaki
+        # `return next_call(request)` onu İKİNCİ kez koşuyordu →
+        # "Middleware 'llm_execution' … called next_call() more than once; downstream execution
+        # is single-use". Artık sağlayıcı istisnası YUTULMAZ; yalnız ölçüm/ayar hataları yutulur.
         try:
-            if not core.ollama_bulut_mu(kw.get("provider"), kw.get("base_url"), kw.get("model")):
-                return next_call(request)  # yerel/LAN Ollama ya da Ollama dışı → dokunma
+            bulut = core.ollama_bulut_mu(kw.get("provider"), kw.get("base_url"), kw.get("model"))
+        except Exception as exc:
+            logger.debug("offpeak-bekci: bulut tespiti hatası (%s)", exc)
+            bulut = False
+        if not bulut:
+            return next_call(request)  # yerel/LAN Ollama ya da Ollama dışı → dokunma
+        try:
             ayar = _ayarlar(ctx)
             simdi = core.utc()
             ts = simdi.timestamp()

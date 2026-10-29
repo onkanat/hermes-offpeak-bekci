@@ -168,5 +168,42 @@ class MiddlewareTest(unittest.TestCase):
         self.assertFalse(gunluk.exists(), "yerel çağrı günlüğe bile yazılmamalı")
 
 
+    def test_next_call_tek_kez_cagrilir_hata_yutulmaz(self):
+        """Sağlayıcı hatası YUTULMAZ; ``next_call`` ikinci kez çağrılmaz.
+
+        Ölçüldü (29.10.2026, masaüstü): *"Middleware 'llm_execution' … called next_call() more
+        than once; downstream execution is single-use"*. Kök neden: bulut olmayan dal
+        ``next_call``ı ``try`` İÇİNDE çağırıyordu; sağlayıcı hatası ``except``e düşünce alttaki
+        ``return next_call(request)`` onu İKİNCİ kez koşuyordu.
+        """
+        gunluk = self.gecici / "hata.jsonl"
+        mw = mod._gecikme_kapisi(SahteBaglam(olcum_dosyasi=str(gunluk)))
+        sayac = {"n": 0}
+
+        def patlayan(_req):
+            sayac["n"] += 1
+            raise RuntimeError("sağlayıcı hatası")
+
+        with self.assertRaises(RuntimeError):
+            mw({"i": 0}, patlayan, base_url="http://10.0.0.1:11434", model="qwen3:8b")
+        self.assertEqual(sayac["n"], 1, "next_call tam BİR kez çağrılmalı (downstream tek kullanımlık)")
+
+    def test_bulut_yolunda_da_tek_cagri(self):
+        """Bulut dalında da (ölçüm açıkken) next_call tek kez çağrılır."""
+        gunluk = self.gecici / "bulut-tek.jsonl"
+        mw = mod._gecikme_kapisi(SahteBaglam(olcum_dosyasi=str(gunluk), kuru_kosu=True))
+        sayac = {"n": 0}
+
+        def sayan(_req):
+            sayac["n"] += 1
+            return "OK"
+
+        with _SahteHermesConfig({}):
+            with mod._kilit:
+                mod._ayar_onbellek["ts"] = 0.0
+            mw({"i": 0}, sayan, **BULUT)
+        self.assertEqual(sayac["n"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
