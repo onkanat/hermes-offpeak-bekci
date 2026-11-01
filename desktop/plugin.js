@@ -771,6 +771,16 @@ const $durum = atom(null)
 /** İlk turda ölçülen kuyruk sayıları; backend yanıtı gelene kadar son bilinen değer. */
 let sonSayilar = { bekleyen: 0, onaylı: 0, toplam: 0 }
 
+/**
+ * Backend'den en az bir kez sayı geldi mi?
+ *
+ * NEDEN (ölçüldü 01.11.2026 20:4x): rozet `0/0` gösteriyordu — bu, gerçek sayı değil
+ * `sonSayilar`'ın başlangıç değeriydi (backend aynı anda `1 bekliyor / 0 onaylı` diyordu).
+ * `slash.exec` tazelemesi düşmeyince hata yutuluyor ve rozet "sıfır" diye okunuyordu.
+ * Artık veri gelmeden sayı yerine `–/–` yazılır: yanlış sıfır, ölçüm gibi görünmesin.
+ */
+let sayilarGeldi = false
+
 /** `ctx.storage` (host) ya da bellek yedeği — `t30Karari` yalnız get/set bekler. */
 function depoYap(ctx) {
   const yedek = new Map()
@@ -950,6 +960,7 @@ async function sayilariTazele() {
     }
     if (yeni) {
       sonSayilar = yeni
+      sayilarGeldi = true
     }
     if (yeni || uzakAyar) {
       tikle()
@@ -970,7 +981,13 @@ function Rozet() {
     return null
   }
   const p = rozetParcalari(d.ozet, d.sayilar)
-  const etiket = `${t('rozet', p.pencere)} ${p.geri_sayim}`
+  // Pencere sözcüğü ile geri sayım ayrı parçalardır: biri boşsa etikete "undefined" yazmasın.
+  const etiket = [t('rozet', p.pencere), p.geri_sayim]
+    .map(x => String(x ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+  // Veri gelmeden `0/0` yazmak "sıfır kalem" diye okunuyordu (ölçüldü 01.11: backend 1/0 diyordu).
+  const sayacMetni = sayilarGeldi ? `${p.bekleyen}/${p['onaylı']}` : '–/–'
 
   return jsx(Tip, {
     label: t('tip', p.geri_sayim, p.bekleyen, p['onaylı'], KAYNAK),
@@ -993,10 +1010,10 @@ function Rozet() {
       },
       children: [
         jsx('span', { className: 'text-(--ui-text-quaternary)', children: p.pencere === 'peak' ? '☀' : '☾' }),
-        jsx('span', { className: 'font-medium text-foreground', children: etiket }),
+        jsx('span', { className: 'font-medium text-foreground whitespace-nowrap shrink-0', children: etiket }),
         jsx('span', {
-          className: 'text-(--ui-text-quaternary)',
-          children: `${p.bekleyen}/${p['onaylı']}`
+          className: 'text-(--ui-text-quaternary) whitespace-nowrap shrink-0',
+          children: sayacMetni
         })
       ]
     })
@@ -1059,6 +1076,10 @@ export default {
     tikle() // ilk boyama: rozet beklemeden dolu gelsin
     ctx.setInterval(tikle, ayar.tik_ms)
     ctx.setTimeout(() => void sayilariTazele(), 2000)
+    // Sayı tazelemesi TEK ATIŞLIK değil: `slash.exec` odaklı oturum kimliğine bağlı ve
+    // uygulama açılışında o kimlik henüz boş olabiliyor (ölçüldü 01.11.2026: rozet 22 saat
+    // boyunca `0/0` — yani hiç tazelenmemiş — kaldı, arka uç ise `1 bekliyor / 0 onaylı` diyordu).
+    ctx.setInterval(() => void sayilariTazele(), 60_000)
     ctx.onDispose(() => {
       ctxRef = null
       depo = null

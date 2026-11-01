@@ -201,7 +201,7 @@ function rozetAgaci(katki) {
   return eleman.type(eleman.props)
 }
 
-test('kayıt: rozet statusBar.right alanına order 40 ile eklenir; ilk boyama 0/0', async () => {
+test('kayıt: rozet statusBar.right alanına order 40 ile eklenir; ilk boyama –/–', async () => {
   const { ctx, katki } = await yukleVeKaydet()
 
   assert.equal(ctx.kayitli.length, 1)
@@ -214,7 +214,7 @@ test('kayıt: rozet statusBar.right alanına order 40 ile eklenir; ilk boyama 0/
 
   assert.match(yazi, /off-peak/, 'rozet etiketi penceresini yazar')
   assert.match(yazi, /\d\d:\d\d/, 'geri sayım çizilir')
-  assert.match(yazi, /0\/0/, 'backend yanıtı yokken sayaç 0/0 kalır')
+  assert.match(yazi, /–\/–/, 'backend yanıtı yokken sayaç –/– (yanlış sıfır basılmaz)')
   assert.match(agac.props.label, /0 bekliyor \/ 0 onaylı/, 'ipucu sayıları tr sözlükten gelir')
   assert.equal(ctx.zaman.interval[0].ms, VARSAYILAN_AYAR.tik_ms, 'tik aralığı şema varsayılanı')
   assert.equal(ctx.zaman.timeout[0].ms, 2000, 'ilk backend tazelemesi 2 sn sonra')
@@ -288,7 +288,7 @@ test('odaklı oturum yoksa backend’e hiç gidilmez (sayaç son değeri korur)'
   assert.equal(denendi, false, 'focusedSessionId yokken RPC denenmez (gateway reddederdi)')
 })
 
-test('gateway yoksa rozet yine çizilir (yerel hesap, 0/0)', async () => {
+test('gateway yoksa rozet yine çizilir (yerel hesap, sayı yok → –/–)', async () => {
   const { ctx, katki } = await yukleVeKaydet({
     odak: 'oturum-w4a2',
     istek: async () => {
@@ -300,9 +300,23 @@ test('gateway yoksa rozet yine çizilir (yerel hesap, 0/0)', async () => {
 
   const yazi = metin(rozetAgaci(katki).props.children)
 
-  assert.match(yazi, /0\/0/)
+  // ÖLÇÜLDÜ 01.11.2026: veri gelmeden `0/0` yazmak "sıfır kalem" diye okunuyordu (arka uç 1/0 diyordu).
+  assert.match(yazi, /–\/–/, 'veri yokken yanlış sıfır değil –/– yazılır')
   assert.match(yazi, /\d\d:\d\d/)
   assert.equal(ctx.depo.get('ayar')?.kuyruk_dosyasi, undefined, 'başarısız yanıt depoya yazılmaz')
+})
+
+test('backend sayıları gelince rozet GERÇEK sayıları yazar (0/0 kalmaz)', async () => {
+  const { ctx, katki } = await yukleVeKaydet({
+    odak: 'oturum-w4a2',
+    istek: async () => ({
+      result: JSON.stringify({ kuyruk: { toplam: 29, bekleyen: 29, onaylı: 0, onay_bekleyen: 1 } })
+    })
+  })
+
+  await ctx.zaman.timeout[0].fn()
+
+  assert.match(metin(rozetAgaci(katki).props.children), /1\/0/, '1 bekleyen / 0 onaylı görünür')
 })
 
 test('bozuk/sarılı yanıt ayarları bozmaz (jsonBul defansif)', async () => {
@@ -313,7 +327,7 @@ test('bozuk/sarılı yanıt ayarları bozmaz (jsonBul defansif)', async () => {
 
   await ctx.zaman.timeout[0].fn()
 
-  assert.match(metin(rozetAgaci(katki).props.children), /0\/0/, 'sayılar korunur')
+  assert.match(metin(rozetAgaci(katki).props.children), /–\/–/, 'sayı gelmedi: –/– yazılır (yanlış sıfır basılmaz)')
   assert.equal(ctx.depo.get('ayar'), undefined, 'ayar yazılmaz')
 })
 
