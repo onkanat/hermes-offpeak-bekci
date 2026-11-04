@@ -3,6 +3,28 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.9] — 2026-11-03
+
+**The `llm_execution` middleware calls `next_call` exactly once, and a downstream provider error is
+no longer masked as a middleware error.**
+
+- **Real cause surfaced.** The local/LAN branch returned `next_call(request)` *inside* the
+  `try` block; when the provider raised, the catch-all swallowed it and the closing
+  `return next_call(request)` ran a second time — `hermes_cli/middleware.py` aborts with
+  `Middleware 'llm_execution' … called next_call() more than once; downstream execution is
+  single-use`, hiding the actual failure (`Connection error`, `HTTP 404 model not loaded`,
+  `HTTP 400 no model loaded`). In one deployment 13 cron runs (2026-10-27 → 11-02) were triaged as
+  middleware faults for this reason. The provider decision now has its own `try`; the local return
+  sits outside it, so exactly one call is made and downstream errors propagate unchanged.
+- **Status chip refreshes on a timer (peer deployment report, 2026-11-01).** The chip refreshed its numbers
+  once, ~2 s after open; if that single `slash.exec` failed (session id not yet focused) it never
+  retried and kept showing the `0/0` initial value for hours. The refresh now repeats every 60 s
+  through `ctx.setInterval` and prints `–/–` until real numbers arrive, so a failed first shot is
+  not mistaken for a real count.
+- **Test note.** Run the suite from a copy whose directory name has no dash (`offpeak_bekci/`):
+  a dash in the parent directory breaks the relative import used by the tests.
+  Reference run: `146 passed, 146 subtests passed`.
+
 ## [0.1.8] — 2026-10-24
 
 **A queue item written as a section heading is counted again, and `/offpeak-durum` says when an

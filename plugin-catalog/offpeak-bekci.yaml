@@ -12,7 +12,7 @@ description: "Makes Ollama Cloud's off-peak window visible and actionable in Her
 maintainer: onkanat
 tier: community
 category: desktop
-version: "0.1.8"
+version: "0.1.9"
 requires_hermes: ">=0.22.2"
 docs_url: https://github.com/onkanat/hermes-offpeak-bekci#readme
 platforms: []
