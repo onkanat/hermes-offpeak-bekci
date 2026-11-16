@@ -3,6 +3,18 @@
 Sürüm numarasının TEK beyan kaynağı `plugin.yaml` → `version` alanıdır
 (`plugin-catalog/offpeak-bekci.yaml` → `version` onunla aynı olmak zorundadır).
 
+## [0.1.10] — 2026-11-16
+
+**The pending count no longer invents work from a mis-formatted status cell.**
+
+- **`onay_bekleyen` is now the sum of its parts.** `kuyruk_sayilari` derived it as
+  `toplam − onaylı − koşuldu − atlandı`, so a row whose status cell no bucket recognised (written as
+  `koşuldu 27.10…` without the bold markers around the status word) landed in "waiting for approval".
+  On the live queue this produced a phantom `onay bekliyor 1` while nothing was pending
+  (measured 2026-11-16: 48 rows, 47 `koşuldu`, 1 mis-formatted).
+- **New `siniflanamayan` counter.** Unrecognised rows are reported on their own and never inflate the
+  pending count; regression test `test_siniflanamayan_kalem_onay_bekleyen_sayilmaz` (suite 146 → 147).
+
 ## [0.1.9] — 2026-11-03
 
 **The `llm_execution` middleware calls `next_call` exactly once, and a downstream provider error is
