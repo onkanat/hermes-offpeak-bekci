@@ -694,6 +694,8 @@ def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
     ``onaylı + beklemede + koşuldu + atlandı + sahipsiz == toplam``.
     **Kesişen (alt küme):** ``onaysiz`` = onaylı olmayan her kalem (``koşuldu``yu da içerir); bölüşüme girmez.
     ``onay_bekleyen`` = gerçekten iş bekleyen (onay bekleyen + sahipsiz) — insan metni BUNU kullanır.
+    ``siniflanamayan`` = hiçbir kovaya girmeyen kalem (tanınmayan durum hücresi); **onay_bekleyen'e girmez**,
+    yalnız uyarı olarak raporlanır (16.11.2026: kalınsız `koşuldu …` hücresi hayalet sayaç üretiyordu).
     ``bekleyen`` = ``onaysiz`` ile aynı değerin ESKİ adıdır (geriye uyumluluk); insan metninde kullanılmaz
     (ölçüldü 16.10.2026: "kuyruk 4 bekliyor" yazıyordu ama 4 kalem KOŞULMUŞTU).
     """
@@ -715,8 +717,13 @@ def kuyruk_sayilari(kalemler: Sequence[Dict[str, Any]]) -> Dict[str, int]:
         "sahipsiz": sayim[SAHIPSIZ],
         # Kesişen sayaç: onaylı olmayan her kalem (koşuldu dahil) — bölüşüme GİRMEZ.
         "onaysiz": onaysiz,
-        # Gerçekten iş bekleyen (onay bekleyen veya sahipsiz): toplam − onaylı − koşuldu − atlandı
-        "onay_bekleyen": toplam - onayli - kosuldu - atlandi,
+        # Gerçekten iş bekleyen: onay bekleyen + sahipsiz.
+        # NEDEN çıkarma formülü DEĞİL (ölçüldü 16.11.2026): durum hücresi kalınsız yazılmış bir kalem
+        # (`koşuldu 27.10…`) hiçbir kovaya girmiyordu; `toplam − onaylı − koşuldu − atlandı` onu
+        # "onay bekliyor" sanıp rozette hayalet sayaç üretiyordu (48 kalem · 47 koşuldu → "onay bekliyor 1").
+        "onay_bekleyen": sayim[BEKLIYOR] + sayim[SAHIPSIZ],
+        # Hiçbir kovaya girmeyen kalem sayısı: raporlanır, "onay bekliyor"a SAYILMAZ.
+        "siniflanamayan": max(0, toplam - onayli - sayim[BEKLIYOR] - kosuldu - atlandi - sayim[SAHIPSIZ]),
         # DEPRECATED: `onaysiz`ın eski adı; geriye uyumluluk için durur, insan metninde kullanılmaz.
         "bekleyen": onaysiz,
         "toplam": toplam,

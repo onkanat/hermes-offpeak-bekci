@@ -212,6 +212,23 @@ class KuyrukTest(unittest.TestCase):
         self.assertEqual(s["bekleyen"], s["onaysiz"])  # geriye uyumlu alias
         self.assertEqual(s["onay_bekleyen"], s["beklemede"] + s["sahipsiz"] + (s["toplam"] - (s["onaylı"] + s["beklemede"] + s["koşuldu"] + s["atlandı"] + s["sahipsiz"])))
 
+    def test_siniflanamayan_kalem_onay_bekleyen_sayilmaz(self):
+        """Tanınmayan durum hücresi kovaya girmez → 'onay bekliyor' SAYILMAZ (16.11.2026).
+
+        Ölçüldü: defterde durum hücresi kalınsız yazılmış bir kalem vardı (`koşuldu 27.10.2026 21:11 …`);
+        eski çıkarma formülü (`toplam − onaylı − koşuldu − atlandı`) onu bekleyen sanıp rozette
+        hayalet "onay bekliyor 1" üretiyordu. Artık ayrı sayaç: `siniflanamayan`.
+        """
+        kalemler = [
+            {"id": "K-001", "durum": c.KOSULDU},
+            {"id": "K-002", "durum": "koşuldu 27.10.2026 21:11 — kalınsız yazım"},
+        ]
+        s = c.kuyruk_sayilari(kalemler)
+        self.assertEqual(s["toplam"], 2)
+        self.assertEqual(s["koşuldu"], 1)
+        self.assertEqual(s["onay_bekleyen"], 0, "tanınmayan durum 'onay bekliyor' sayılmamalı")
+        self.assertEqual(s["siniflanamayan"], 1)
+
     def test_onayla_bayt_korur_ve_tekil(self):
         yeni, degisen = c.kuyruk_onayla(TABLO, ["K-001"])
         self.assertEqual(degisen, ["K-001"])
